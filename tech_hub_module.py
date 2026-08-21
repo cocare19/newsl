@@ -6,11 +6,15 @@ import json
 import re
 from datetime import datetime
 from dateutil import parser as date_parser
+from urllib.parse import urljoin
 
 WEB_SOURCES = [
-    ("🇹🇭 TNN Tech Reports", "https://www.tnnthailand.com/tech/"),
+    ("🌐 TNN Tech (TNN ช่อง 16 ข่าวไอที & นวัตกรรม)", "https://www.tnnthailand.com/tech/"),
+    ("📱 Beartai Tech (แบไต๋ - ข่าวไอที & เทคโนโลยี)", "https://www.beartai.com/news/it-news"),
+    ("🤖 DroidSans (ดรอยด์แซนส์ - ข่าวมือถือ & Gadget)", "https://droidsans.com/"),
+    ("💻 Techhub (เทคฮับ - ทริกไอที & นวัตกรรม)", "https://www.techhub.in.th/"),
+    ("📰 Thairath Tech (ไทยรัฐออนไลน์ - หมวดไอที)", "https://www.thairath.co.th/news/tech"),
     ("🇹🇭 Blognone (ไอที & ธุรกิจเทคโนโลยี)", "https://www.blognone.com/"),
-    ("🇹🇭 DroidSans (สมาร์ทโฟน, AI & Gadget)", "https://droidsans.com/"),
     ("🌐 TechCrunch (Global Tech & Startups)", "https://techcrunch.com/"),
     ("🌐 The Verge (Tech, AI & Gadgets)", "https://www.theverge.com/"),
 ]
@@ -530,8 +534,22 @@ def render_tech_hub_page():
 
     # --- TAB 1: เว็บไซต์ข่าว ---
     with tab1:
-        selected_web = st.selectbox("เลือกเว็บข่าว:", WEB_SOURCES, format_func=lambda x: x[0], key="web_sel")
-        if st.button("🚀 สแกนและดึงหัวข้อข่าวล่าสุด", key="web_btn"):
+        col_sel, col_link = st.columns([3.2, 1.2])
+        with col_sel:
+            selected_web = st.selectbox("เลือกเว็บข่าว:", WEB_SOURCES, format_func=lambda x: x[0], key="web_sel")
+        with col_link:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            st.link_button("🌐 เปิดเว็บต้นฉบับ", selected_web[1], use_container_width=True)
+
+        col_btn, col_count = st.columns([2.5, 1.5])
+        with col_btn:
+            btn_scan = st.button("🚀 สแกนและดึงหัวข้อข่าวล่าสุด", use_container_width=True, key="web_btn")
+        with col_count:
+            web_limit = st.selectbox("จำนวนหัวข้อ:", [10, 15, 20, 30], index=1, key="web_limit_sel")
+
+        web_cache_key = f"web_cache_{selected_web[1]}_{web_limit}"
+        
+        if btn_scan or web_cache_key not in st.session_state:
             with st.spinner(f"กำลังเชื่อมต่อและดึงหัวข้อข่าวสดจาก {selected_web[0]}..."):
                 try:
                     r = requests.get(selected_web[1], headers=HTTP_HEADERS, timeout=10)
@@ -541,27 +559,46 @@ def render_tech_hub_page():
                     articles = []
                     seen_txt = set()
                     
-                    for tag in soup.find_all(['h1', 'h2', 'h3', 'h4']):
+                    for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'a']):
                         txt = tag.get_text(separator=" ", strip=True)
+                        link = tag.get('href') if tag.name == 'a' else None
+                        if not link and tag.find('a'):
+                            link = tag.find('a').get('href')
+                        
+                        if link and not link.startswith(('http://', 'https://')):
+                            link = urljoin(selected_web[1], link)
+                            
+                        # Clean title
+                        txt = re.sub(r'^\d+(\.\d+)?[Kk]?\s*(News)?\s*', '', txt).strip()
+                        
                         if txt and len(txt) > 20 and len(txt) < 200 and txt not in seen_txt:
-                            if not any(skip in txt.lower() for skip in ['cookie', 'privacy', 'policy', 'terms', 'ติดต่อเรา', 'เข้าสู่ระบบ', 'สมัครสมาชิก']):
+                            if not any(skip in txt.lower() for skip in ['cookie', 'privacy', 'policy', 'terms', 'ติดต่อเรา', 'เข้าสู่ระบบ', 'สมัครสมาชิก', 'facebook', 'twitter', 'share', 'line', 'javascript:']):
                                 seen_txt.add(txt)
-                                articles.append(txt)
+                                articles.append({
+                                    'title': txt,
+                                    'link': link or selected_web[1]
+                                })
                     
-                    if articles:
-                        st.markdown(f"##### 📰 หัวข้อข่าวเด่นจาก {selected_web[0]}:")
-                        for idx, art in enumerate(articles[:15]):
-                            st.markdown(f"""
-                                <div class="content-box" style="padding: 12px 16px; margin-bottom: 8px;">
-                                    <b>#{idx+1}</b> <span style="font-size: 0.95rem; font-weight: 600; color: #0F172A;">{art}</span>
-                                </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        st.info("ไม่พบรายการข่าวที่แยกแยะได้ชัดเจน หรือเว็บไซต์มีการป้องกันการเข้าถึง")
-                    st.write("")
-                    st.link_button("🌐 ไปที่เว็บต้นฉบับฉบับเต็ม", selected_web[1])
+                    st.session_state[web_cache_key] = articles[:web_limit]
                 except Exception as e:
                     st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
+                    st.session_state[web_cache_key] = []
+
+        cached_articles = st.session_state.get(web_cache_key, [])
+        if cached_articles:
+            st.markdown(f"##### 📰 หัวข้อข่าวเด่นจาก {selected_web[0]} (ทั้งหมด {len(cached_articles)} ข่าว):")
+            for idx, art in enumerate(cached_articles):
+                col_t, col_b = st.columns([5.5, 1.2])
+                with col_t:
+                    st.markdown(f"""
+                        <div class="content-box" style="padding: 10px 14px; margin-bottom: 6px;">
+                            <b>#{idx+1}</b> <span style="font-size: 0.95rem; font-weight: 600; color: #0F172A;">{art['title']}</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+                with col_b:
+                    st.link_button("🔗 อ่านข่าวนี้", art['link'], use_container_width=True)
+        else:
+            st.info("ไม่พบรายการข่าวที่แยกแยะได้ชัดเจน หรือเว็บไซต์มีการป้องกันการเข้าถึง")
 
     # --- TAB 2: YouTube Playlists ---
     with tab2:
