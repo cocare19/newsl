@@ -53,6 +53,28 @@ CHANNEL_SOURCES = [
     ("⚽ บอ บู๋ (วิเคราะห์ฟุตบอล & ข่าวฟุตบอล)", "https://www.youtube.com/@borbou23/videos", "https://www.youtube.com/feeds/videos.xml?channel_id=UCsS1nKrY6qUx-6XW8e-Tuww", "Sports & Football"),
     ("⚽ LFC Zone (ลิเวอร์พูล)", "https://www.youtube.com/@LFCZone_th/videos", "https://www.youtube.com/feeds/videos.xml?channel_id=UCL82HFRm67wKhp1emhExXeg", "Sports & Football"),
     ("⚽ L.F.C News (ข่าวสารลิเวอร์พูล & พรีเมียร์ลีก)", "https://www.youtube.com/@mobilelegends-ix4lo/videos", "https://www.youtube.com/feeds/videos.xml?channel_id=UCZPGPsGivKWuTBwpS9yKR3w", "Sports & Football"),
+
+    # --- หมวด 4: วัดป่าโสมพนัส ---
+    ("🙏 วัดป่าโสมพนัส (วิดีโอล่าสุดทั้งหมด - Videos)", "https://www.youtube.com/@SomphanasChannel/videos", "", "วัดป่าโสมพนัส"),
+    ("🔴 วัดป่าโสมพนัส (ถ่ายทอดสด & ไลฟ์ย้อนหลัง - Streams)", "https://www.youtube.com/@SomphanasChannel/streams", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2569 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=Cg5T8c1EukA&list=PLGhB75n3uUhA", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2568 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=mfJ272Z1Ulk&list=PLFUWYN2-4Xi6OxQiRp9lXbP_dhwaz0QIP", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2567 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=UXCt7K9dVVc&list=PLFUWYN2-4Xi7hDzjVaA7swwbVWi81Rgje", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2566 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=YtRVWE1rBw4&list=PLFUWYN2-4Xi6AIb6y6XXr8cpV80V1PNkw", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2565 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=elXz8ofs8PU&list=PLFUWYN2-4Xi7RHJunp8w9GHAmpI-l6nY1", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2564 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=VzRpbNFQcHk&list=PLFUWYN2-4Xi4x9_3fT3y_ODD_16uzZWdF", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2563 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=txXuP811iWU&list=PLFUWYN2-4Xi5dF2aiVGgECqFnX7h8N9D_", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2562 ธรรมบรรยาย โดย..หลวงตาสุริยา (Playlist)", "https://www.youtube.com/watch?v=m-tA01HSvRw&list=PLFUWYN2-4Xi52Vv5ooMWAAxD-ywhXP5yK", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2561 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=Nu6DovKZpiQ&list=PLFUWYN2-4Xi6JBu4c9mIpgnGVeH-c5Tqt", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2560 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=JjKLiBM4Z8U&list=PLFUWYN2-4Xi4qFoK3SIGg3cwAqEiG7JHo", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2559 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=-lLDZcONOSI&list=PLFUWYN2-4Xi7zyl6TPvNxl1ga3Eo-cjJB", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2558 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=Eymb_9v51hI&list=PLFUWYN2-4Xi7W3StCqnNdL_64dMN8bI4J", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2557 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=uGimpK7JXmA&list=PLFUWYN2-4Xi4hXM0RQqQvqkEpleAs_PbS", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2556 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=B6bTym_vdck&list=PLFUWYN2-4Xi6ZY43TMfijI9wUmmePQLM4", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2555 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=w-KJ75i1QDg&list=PLFUWYN2-4Xi6xmXBiEphUZ6aw6SomJgkk", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2554 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=rTOR-eesBGA&list=PLFUWYN2-4Xi5_lMtHDIjwDtxS32SQq4Pd", "", "วัดป่าโสมพนัส"),
+    ("☸️ ปี 2553 ธรรมบรรยาย โดย..หลวงตาสุริยา มหาปัญโญ (Playlist)", "https://www.youtube.com/watch?v=1GhiL5YQIp8&list=PLFUWYN2-4Xi59zvbzJEmuyQwVqmuiPaoe", "", "วัดป่าโสมพนัส"),
+    ("☸️ 12.เทปบันทึก-เสียงธรรม (เปิดในคอร์ส) (Playlist)", "https://www.youtube.com/watch?v=QucJ7F8dVt4&list=PLFUWYN2-4Xi7JjVf2GAYNTSTkoyV1h3EK", "", "วัดป่าโสมพนัส"),
 ]
 
 HTTP_HEADERS = {
@@ -363,18 +385,22 @@ def fetch_youtube_channel_videos(channel_info, max_items=20, sort_by="newest"):
     ดึงคลิปวิดีโอจาก YouTube Channel แบบยืดหยุ่น (1-100 คลิป)
     รองรับการจัดเรียงคลิปตามเวลาจริง (Newest First), ลำดับเดิม (Original), หรือเก่าสุด (Oldest)
     """
-    web_url = channel_info[1] if isinstance(channel_info, (list, tuple)) else channel_info
+    web_url = channel_info[1] if isinstance(channel_info, (list, tuple)) else str(channel_info)
     feed_url = channel_info[2] if isinstance(channel_info, (list, tuple)) and len(channel_info) > 2 else ""
     
+    # ตรวจสอบว่าเป็น Playlist URL หรือไม่ ถ้าใช่ให้ส่งต่อไปยัง Playlist Fetcher ทันที
+    if "list=" in web_url or "/playlist" in web_url:
+        return fetch_youtube_playlist_videos(channel_info, max_items=max_items, sort_by=sort_by)
+
     videos = []
     seen_ids = set()
     
-    # 1. ดึงข้อมูลจากหน้าเว็บ YouTube /videos เพื่อให้ได้คลิปจำนวนมาก (สูงสุด 100 คลิป)
+    # 1. ดึงข้อมูลจากหน้าเว็บ YouTube /videos หรือ /streams เพื่อให้ได้คลิปจำนวนมาก (สูงสุด 100 คลิป)
     try:
         url = web_url
-        if "@" in url and not url.endswith("/videos"):
+        if "@" in url and not any(url.endswith(suffix) for suffix in ["/videos", "/streams", "/shorts", "/live", "/playlists"]):
             url = url.rstrip("/") + "/videos"
-        elif "channel/" in url and not url.endswith("/videos"):
+        elif "channel/" in url and not any(url.endswith(suffix) for suffix in ["/videos", "/streams", "/shorts", "/live", "/playlists"]):
             url = url.rstrip("/") + "/videos"
             
         r = requests.get(url, headers=HTTP_HEADERS, timeout=8)
@@ -649,7 +675,7 @@ def render_tech_hub_page():
     # --- TAB 3: YouTube Channels ---
     with tab3:
         # ตัวเลือกฟิลเตอร์หมวดหมู่ช่อง
-        category_options = ["IT & Tech", "Anime & Movies", "Sports & Football", "🌟 ทั้งหมด (All Categories)"]
+        category_options = ["IT & Tech", "Anime & Movies", "Sports & Football", "วัดป่าโสมพนัส", "🌟 ทั้งหมด (All Categories)"]
         ch_category = st.radio(
             "📂 เลือกหมวดหมู่คอนเทนต์:",
             options=category_options,
