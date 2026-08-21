@@ -1,0 +1,14 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Streamlit secrets (เก็บ API Keys ใน Cloud Secrets แทน ห้าม Push ขึ้น Git)
+.streamlit/secrets.toml
+.streamlit/old/
+.streamlit/full/
+
+# Scratch & Dev Folders
+oldapp/
+*.log
+.DS_Store
