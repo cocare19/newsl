@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import requests
 import json
 import re
@@ -582,18 +581,53 @@ def fetch_tech_ai_stocks():
     return results
 
 # ==============================================================================
-# 4. ระบบดึงตารางคะแนนพรีเมียร์ลีก (20 สโมสร)
+# 4. ระบบดึงตารางคะแนนพรีเมียร์ลีก Real-Time Live Standings (20 สโมสร)
 # ==============================================================================
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=60)
 def fetch_skysports_standings():
-    """ดึงตารางคะแนนสด 20 สโมสรจาก Sky Sports พร้อมประกบตราสโมสร"""
-    url = "https://www.skysports.com/premier-league-table"
+    """ดึงตารางคะแนนพรีเมียร์ลีกสดเรียลไทม์ (อัปเดตผลทันทีหลังจบเกม) จาก ESPN & Sky Sports"""
+    # 1. ดึงจาก ESPN Live Feed (อัปเดตคะแนนสดทันทีแบบเรียลไทม์)
+    try:
+        url_espn = "https://www.espn.com/soccer/standings/_/league/eng.1"
+        tables = pd.read_html(url_espn, storage_options={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+        if len(tables) >= 2:
+            df_names = tables[0]
+            df_stats = tables[1]
+            clean_names = []
+            for raw in df_names.iloc[:, 0]:
+                s = str(raw).strip()
+                m = re.match(r'^\d{1,2}[A-Z]{3}(.+)$', s)
+                if m:
+                    clean_names.append(m.group(1).strip())
+                else:
+                    clean_names.append(re.sub(r'^\d+', '', s).strip())
+
+            df_espn = pd.DataFrame({
+                'Pos': list(range(1, len(clean_names) + 1)),
+                'Club': clean_names,
+                'Pl': pd.to_numeric(df_stats['GP'], errors='coerce').fillna(0).astype(int),
+                'W': pd.to_numeric(df_stats['W'], errors='coerce').fillna(0).astype(int),
+                'D': pd.to_numeric(df_stats['D'], errors='coerce').fillna(0).astype(int),
+                'L': pd.to_numeric(df_stats['L'], errors='coerce').fillna(0).astype(int),
+                'F': df_stats['F'],
+                'A': df_stats['A'],
+                'GD': df_stats['GD'].apply(lambda x: f"+{x}" if str(x).isdigit() and int(x) > 0 else (f"+{x}" if str(x).replace('-','').isdigit() and int(x) > 0 else str(x))),
+                'Pts': pd.to_numeric(df_stats['P'], errors='coerce').fillna(0).astype(int)
+            })
+            df_espn['Badge'] = df_espn['Club'].apply(get_club_logo)
+            if not df_espn.empty and len(df_espn) >= 18:
+                return df_espn[['Pos', 'Badge', 'Club', 'Pl', 'W', 'D', 'L', 'F', 'A', 'GD', 'Pts']]
+    except Exception:
+        pass
+
+    # 2. สำรอง: ดึงจาก Sky Sports Table
+    url_sky = "https://www.skysports.com/premier-league-table"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9'
     }
     try:
-        r = requests.get(url, headers=headers, timeout=8)
+        r = requests.get(url_sky, headers=headers, timeout=8)
         if r.status_code == 200:
             tables = pd.read_html(io.StringIO(r.text))
             if tables:
@@ -609,67 +643,78 @@ def fetch_skysports_standings():
     return pd.DataFrame()
 
 # ==============================================================================
-# 5. ระบบสร้างและดึงโปรแกรมการแข่งขันพรีเมียร์ลีกครบทั้งฤดูกาล (38 MATCHWEEKS)
+# 5. ระบบดึงโปรแกรมการแข่งขันและผลบอลพรีเมียร์ลีกสดตรงจาก Sky Sports Live Feed
 # ==============================================================================
-@st.cache_data(ttl=600)
+def convert_to_thai_time(time_str):
+    """แปลงเวลา UK (e.g. 12.30pm, 3.00pm, 8.00pm) เป็นเวลาไทย (+6 ชม. BST)"""
+    try:
+        clean = time_str.strip().lower().replace('.', ':')
+        t = datetime.strptime(clean, "%I:%M%p")
+        # BST (UTC+1) to Thai Time (UTC+7) = +6 Hours
+        hour = (t.hour + 6) % 24
+        minute = t.minute
+        return f"{hour:02d}:{minute:02d} น."
+    except Exception:
+        return time_str
+
+@st.cache_data(ttl=60)
 def fetch_skysports_fixtures():
-    """สร้างและดึงโปรแกรมการแข่งขันพรีเมียร์ลีกครบ 38 สัปดาห์ (380 แมตช์ตลอดฤดูกาล)"""
-    from datetime import datetime, timedelta
-
-    teams = [
-        "Arsenal", "Aston Villa", "Bournemouth", "Brentford", "Brighton",
-        "Chelsea", "Coventry City", "Crystal Palace", "Everton", "Fulham",
-        "Hull City", "Ipswich Town", "Leeds United", "Leicester City", "Liverpool",
-        "Manchester City", "Manchester United", "Newcastle United", "Nottingham Forest", "Tottenham Hotspur"
-    ]
-
-    time_slots = ["18:30 น.", "21:00 น.", "21:00 น.", "21:00 น.", "23:30 น.", "20:00 น.", "22:30 น.", "02:00 น."]
+    """ดึงตารางโปรแกรมการแข่งขันและผลการแข่งขันจริงสดตรงจาก Sky Sports Live Feed"""
+    url = "https://www.skysports.com/premier-league-scores-fixtures"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+    }
     
-    n = len(teams)
-    rounds = []
-    t_list = list(teams)
-    
-    for r in range(n - 1):
-        mid = n // 2
-        l1 = t_list[:mid]
-        l2 = t_list[mid:]
-        l2.reverse()
-        matchups = []
-        for i in range(mid):
-            if r % 2 == 1:
-                matchups.append((l2[i], l1[i]))
-            else:
-                matchups.append((l1[i], l2[i]))
-        rounds.append(matchups)
-        t_list.insert(1, t_list.pop())
-
-    second_half = []
-    for r in rounds:
-        matchups = [(away, home) for (home, away) in r]
-        second_half.append(matchups)
-
-    full_38_rounds = rounds + second_half
-
-    start_date = datetime(2026, 8, 22)
     fixtures_list = []
-
-    for mw_idx, round_matches in enumerate(full_38_rounds, 1):
-        mw_name = f"Matchweek {mw_idx}"
-        match_sat = start_date + timedelta(weeks=mw_idx - 1)
-        match_sun = match_sat + timedelta(days=1)
-
-        for m_idx, (home, away) in enumerate(round_matches):
-            m_date = match_sat.strftime('%d/%m/%Y') if m_idx < 6 else match_sun.strftime('%d/%m/%Y')
-            slot_time = time_slots[m_idx % len(time_slots)]
+    try:
+        r = requests.get(url, headers=headers, timeout=8)
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, 'html.parser')
+            groups = soup.select('.ui-tournament-matches')
             
-            fixtures_list.append({
-                "MW": mw_name,
-                "Date": m_date,
-                "HomeBadge": get_club_logo(home),
-                "Home": home,
-                "Status": slot_time,
-                "Away": away,
-                "AwayBadge": get_club_logo(away)
-            })
+            for grp in groups:
+                # ค้นหาวันที่จาก header h2 ด้านบนของแต่ละกลุ่มการแข่งขัน
+                h2_el = grp.find_previous(['h2', 'h3'])
+                date_text = h2_el.text.strip() if h2_el else "โปรแกรมการแข่งขัน"
+                
+                # ดึงทุกคู่การแข่งขันในกลุ่มวันนั้น
+                for m in grp.select('.ui-sport-match-score'):
+                    teams = [t.text.strip() for t in m.select('.ui-sport-match-score__team-name')]
+                    scores = [s.text.strip() for s in m.select('.ui-sport-match-score__score')]
+                    time_el = m.select_one('.ui-sport-match-score__start-time, .ui-sport-match-score__status-match-time')
+                    status_el = m.select_one('.ui-sport-match-score__status')
+                    
+                    if len(teams) >= 2:
+                        home = teams[0]
+                        away = teams[1]
+                        
+                        clean_scores = [s for s in scores if s]
+                        if len(clean_scores) >= 2:
+                            status_display = f"⚽ {clean_scores[0]} - {clean_scores[1]} (FT)"
+                            is_live_or_ft = True
+                        elif time_el and time_el.text.strip():
+                            raw_time = time_el.text.strip()
+                            thai_time = convert_to_thai_time(raw_time)
+                            status_display = f"⏰ {thai_time} ({raw_time})"
+                            is_live_or_ft = False
+                        elif status_el and status_el.text.strip():
+                            status_display = status_el.text.strip()
+                            is_live_or_ft = True
+                        else:
+                            status_display = "ยังไม่เริ่ม"
+                            is_live_or_ft = False
+                            
+                        fixtures_list.append({
+                            "Date": date_text,
+                            "Home": home,
+                            "HomeBadge": get_club_logo(home),
+                            "Status": status_display,
+                            "Away": away,
+                            "AwayBadge": get_club_logo(away),
+                            "IsFinished": is_live_or_ft
+                        })
+    except Exception:
+        pass
 
     return fixtures_list

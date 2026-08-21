@@ -1,3 +1,40 @@
+import os
+import streamlit as st
+
+def load_api_keys():
+    """โหลดรายการ API Keys จาก Hugging Face Secrets (os.environ) หรือ secrets.toml (st.secrets)"""
+    keys = []
+    
+    # 1. เช็คจาก Environment Variables (Hugging Face Spaces Secrets)
+    env_keys = os.getenv("GEMINI_API_KEYS")
+    if env_keys:
+        for k in env_keys.split(","):
+            k_clean = k.strip()
+            if k_clean and k_clean not in keys:
+                keys.append(k_clean)
+    env_single = os.getenv("GEMINI_API_KEY")
+    if env_single and env_single not in keys:
+        keys.insert(0, env_single)
+
+    # 2. เช็คจาก Streamlit secrets.toml
+    try:
+        if hasattr(st, "secrets") and "GEMINI_API_KEYS" in st.secrets:
+            raw = st.secrets["GEMINI_API_KEYS"]
+            if isinstance(raw, list):
+                for item in raw:
+                    if item not in keys:
+                        keys.append(item)
+            elif isinstance(raw, str) and raw not in keys:
+                keys.append(raw)
+        if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
+            k = st.secrets["GEMINI_API_KEY"]
+            if k not in keys:
+                keys.insert(0, k)
+    except Exception:
+        pass
+
+    return keys
+
 # ตราสโมสรพรีเมียร์ลีกมาตรฐาน (Vector Icons)
 CLUB_BADGES = {
     "arsenal": "https://a.espncdn.com/i/teamlogos/soccer/500/359.png",

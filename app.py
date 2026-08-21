@@ -639,10 +639,13 @@ if menu_selection == "📈 1. Real-Time Market & Pricing":
 # --- 2. PREMIER LEAGUE TABLES ---
 elif menu_selection == "🏆 2. Premier League Tables":
     st.markdown("#### 🏆 Premier League Standings")
-    st.caption("ตารางคะแนนสดครบ 20 สโมสร (Sky Sports Live Feed)")
-    if st.button("🔄 รีเฟรชตารางคะแนนสด", key="btn_sky_refresh"):
-        st.cache_data.clear()
-        st.rerun()
+    st.caption("ตารางคะแนนสดครบ 20 สโมสร (Real-Time Live Feed)")
+    
+    t2_c1, t2_c2 = st.columns([3.5, 8.5])
+    with t2_c1:
+        if st.button("🔄 รีเฟรชตารางคะแนนสด", key="btn_sky_refresh", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
     st.markdown("---")
     df_sky = fetch_skysports_standings()
@@ -709,75 +712,92 @@ elif menu_selection == "🏆 2. Premier League Tables":
         )
         st.html(final_html)
     else:
-        st.error("⚠️ ไม่สามารถเชื่อมต่อกับ Sky Sports ได้ในขณะนี้")
+        st.error("⚠️ ไม่สามารถเชื่อมต่อกับฐานข้อมูลตารางคะแนนได้ในขณะนี้")
 
-# --- 3. PREMIER LEAGUE FIXTURES ---
+# --- 3. PREMIER LEAGUE FIXTURES & SCORES ---
 elif menu_selection == "📅 3. Premier League Fixtures":
-    st.markdown("#### 📅 Premier League Full Season Fixtures")
-    st.caption("โปรแกรมการแข่งขันพรีเมียร์ลีกครบทั้งฤดูกาล (เวลามาตรฐานประเทศไทย BKK)")
+    st.markdown("#### 📅 Premier League Fixtures & Live Scores")
+    st.caption("ผลการแข่งขันและตารางถ่ายทอดสดพรีเมียร์ลีก (Sky Sports Live Feed แปลงเป็นเวลาไทย BKK)")
+
+    t3_c1, t3_c2 = st.columns([3.5, 8.5])
+    with t3_c1:
+        if st.button("🔄 รีเฟรชผลและตารางสด", key="btn_fixtures_refresh", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
     fixtures_raw = fetch_skysports_fixtures()
     df_all_fixtures = pd.DataFrame(fixtures_raw)
 
-    ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([2, 2, 1])
-    with ctrl_col1:
-        mw_options = ["🌟 แสดงทุกสัปดาห์ (All Matchweeks)"] + sorted(
-            list(df_all_fixtures['MW'].unique()), 
-            key=lambda x: int(x.split()[1])
-        )
-        selected_mw = st.selectbox("เลือกสัปดาห์การแข่งขัน:", mw_options)
-    with ctrl_col2:
-        search_team = st.text_input("🔍 กรองเฉพาะทีมโปรด:", placeholder="พิมพ์ เช่น Liverpool, Arsenal...")
-    with ctrl_col3:
-        st.write("")
-        st.write("")
-        st.link_button("🌐 Sky Sports", "https://www.skysports.com/premier-league-fixtures")
+    if not df_all_fixtures.empty:
+        ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([2, 2, 1])
+        with ctrl_col1:
+            all_dates = list(dict.fromkeys(df_all_fixtures['Date'].tolist()))
+            date_options = ["🌟 แสดงทุกวันที่ (All Dates)"] + all_dates
+            selected_date = st.selectbox("📅 เลือกวันที่แข่งขัน:", date_options, key="pl_date_selector")
+        with ctrl_col2:
+            search_team = st.text_input("🔍 ค้นหาทีมโปรด:", placeholder="พิมพ์ เช่น Arsenal, Man Utd, Liverpool...", key="pl_team_search")
+        with ctrl_col3:
+            st.write("")
+            st.write("")
+            st.link_button("🌐 Sky Sports", "https://www.skysports.com/premier-league-scores-fixtures")
 
-    st.markdown("---")
-    df_filtered = df_all_fixtures.copy()
-    if selected_mw != "🌟 แสดงทุกสัปดาห์ (All Matchweeks)":
-        df_filtered = df_filtered[df_filtered['MW'] == selected_mw]
-    if search_team:
-        df_filtered = df_filtered[
-            df_filtered['Home'].str.contains(search_team, case=False, na=False) | 
-            df_filtered['Away'].str.contains(search_team, case=False, na=False)
-        ]
+        st.markdown("---")
+        df_filtered = df_all_fixtures.copy()
+        if selected_date != "🌟 แสดงทุกวันที่ (All Dates)":
+            df_filtered = df_filtered[df_filtered['Date'] == selected_date]
+        if search_team:
+            df_filtered = df_filtered[
+                df_filtered['Home'].str.contains(search_team, case=False, na=False) | 
+                df_filtered['Away'].str.contains(search_team, case=False, na=False)
+            ]
 
-    if not df_filtered.empty:
-        rows_fix_html = []
-        for _, row in df_filtered.iterrows():
-            h_badge = f"<img src='{row['HomeBadge']}' style='width:18px;height:18px;vertical-align:middle;margin-right:6px;object-fit:contain;' onerror=\"this.style.display='none'\">" if row.get('HomeBadge') else ""
-            a_badge = f"<img src='{row['AwayBadge']}' style='width:18px;height:18px;vertical-align:middle;margin-left:6px;object-fit:contain;' onerror=\"this.style.display='none'\">" if row.get('AwayBadge') else ""
-            
-            status_val = row.get('Status', '')
-            status_badge = f"<span class='pl-status-badge'>{status_val}</span>"
+        if not df_filtered.empty:
+            rows_fix_html = []
+            for _, row in df_filtered.iterrows():
+                h_badge = f"<img src='{row['HomeBadge']}' style='width:20px;height:20px;vertical-align:middle;margin-right:6px;object-fit:contain;' onerror=\"this.style.display='none'\">" if row.get('HomeBadge') else ""
+                a_badge = f"<img src='{row['AwayBadge']}' style='width:20px;height:20px;vertical-align:middle;margin-left:6px;object-fit:contain;' onerror=\"this.style.display='none'\">" if row.get('AwayBadge') else ""
+                
+                status_val = str(row.get('Status', ''))
+                is_fin = row.get('IsFinished', False)
+                
+                if "⚽" in status_val or "(FT)" in status_val:
+                    # ผลบอลจบแล้วหรือสด
+                    status_badge = f"<span style='background:#10B981;color:#FFFFFF;padding:4px 8px;border-radius:6px;font-weight:700;font-size:0.82rem;display:inline-block;white-space:nowrap;'>{status_val}</span>"
+                elif "⏰" in status_val:
+                    # เวลาแข่งขัน
+                    status_badge = f"<span style='background:#F1F5F9;color:#1E293B;border:1px solid #CBD5E1;padding:4px 8px;border-radius:6px;font-weight:600;font-size:0.80rem;display:inline-block;white-space:nowrap;'>{status_val}</span>"
+                else:
+                    status_badge = f"<span style='background:#E2E8F0;color:#475569;padding:3px 6px;border-radius:4px;font-size:0.78rem;'>{status_val}</span>"
 
-            row_html = (
-                f"<tr>"
-                f"<td style='padding:7px 4px;font-size:0.77rem;color:#64748B;white-space:nowrap;width:75px;text-align:center;'>{row['Date']}</td>"
-                f"<td style='padding:7px 6px;text-align:right;font-weight:600;width:40%;white-space:nowrap;'>{row['Home']}{h_badge}</td>"
-                f"<td style='padding:7px 4px;text-align:center;width:80px;'>{status_badge}</td>"
-                f"<td style='padding:7px 6px;text-align:left;font-weight:600;width:40%;white-space:nowrap;'>{a_badge}{row['Away']}</td>"
-                f"</tr>"
+                row_html = (
+                    f"<tr>"
+                    f"<td style='padding:8px 4px;font-size:0.80rem;color:#475569;font-weight:600;white-space:nowrap;width:150px;text-align:left;'>{row['Date']}</td>"
+                    f"<td style='padding:8px 6px;text-align:right;font-weight:600;width:35%;white-space:nowrap;'>{row['Home']}{h_badge}</td>"
+                    f"<td style='padding:8px 4px;text-align:center;width:180px;'>{status_badge}</td>"
+                    f"<td style='padding:8px 6px;text-align:left;font-weight:600;width:35%;white-space:nowrap;'>{a_badge}{row['Away']}</td>"
+                    f"</tr>"
+                )
+                rows_fix_html.append(row_html)
+
+            fixtures_body = "".join(rows_fix_html)
+            final_fix_html = (
+                "<div class='pl-table-container' style='overflow-x:auto;'>"
+                "<table class='pl-table' style='width:100%;border-collapse:collapse;'>"
+                "<thead><tr style='background:#F8FAFC;border-bottom:2px solid #E2E8F0;'>"
+                "<th style='width:150px;text-align:left;padding:8px 4px;'>วัน/เวลาแข่ง</th>"
+                "<th style='text-align:right;padding-right:12px;'>เจ้าบ้าน (Home)</th>"
+                "<th style='text-align:center;width:180px;'>ผลบอล / เวลา Kickoff (ไทย)</th>"
+                "<th style='text-align:left;padding-left:12px;'>ทีมเยือน (Away)</th>"
+                "</tr></thead>"
+                f"<tbody>{fixtures_body}</tbody>"
+                "</table></div>"
             )
-            rows_fix_html.append(row_html)
-
-        fixtures_body = "".join(rows_fix_html)
-        final_fix_html = (
-            "<div class='pl-table-container'>"
-            "<table class='pl-table'>"
-            "<thead><tr>"
-            "<th style='width:75px;text-align:center;'>วันที่</th>"
-            "<th style='text-align:right;padding-right:12px;'>เจ้าบ้าน</th>"
-            "<th style='text-align:center;width:80px;'>Kickoff</th>"
-            "<th style='text-align:left;padding-left:12px;'>ทีมเยือน</th>"
-            "</tr></thead>"
-            f"<tbody>{fixtures_body}</tbody>"
-            "</table></div>"
-        )
-        st.html(final_fix_html)
+            st.html(final_fix_html)
+        else:
+            st.warning("⚠️ ไม่พบคู่การแข่งขันที่ตรงกับเงื่อนไขการค้นหา")
     else:
-        st.warning("⚠️ ไม่พบคู่การแข่งขันที่ตรงกับเงื่อนไข")
+        st.warning("⚠️ กำลังโหลดข้อมูลโปรแกรมการแข่งขันจาก Sky Sports หรือไม่สามารถเชื่อมต่อได้ในขณะนี้")
+
 
 # --- 4. CURATED RSS FEEDS ---
 elif menu_selection == "📡 4. Curated RSS Feeds":
