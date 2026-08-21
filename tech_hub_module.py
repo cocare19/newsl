@@ -9,14 +9,14 @@ from dateutil import parser as date_parser
 from urllib.parse import urljoin
 
 WEB_SOURCES = [
-    ("🌐 TNN Tech (TNN ช่อง 16 ข่าวไอที & นวัตกรรม)", "https://www.tnnthailand.com/tech/"),
-    ("📱 Beartai Tech (แบไต๋ - ข่าวไอที & เทคโนโลยี)", "https://www.beartai.com/news/it-news"),
-    ("🤖 DroidSans (ดรอยด์แซนส์ - ข่าวมือถือ & Gadget)", "https://droidsans.com/"),
-    ("💻 Techhub (เทคฮับ - ทริกไอที & นวัตกรรม)", "https://www.techhub.in.th/"),
-    ("📰 Thairath Tech (ไทยรัฐออนไลน์ - หมวดไอที)", "https://www.thairath.co.th/news/tech"),
-    ("🇹🇭 Blognone (ไอที & ธุรกิจเทคโนโลยี)", "https://www.blognone.com/"),
-    ("🌐 TechCrunch (Global Tech & Startups)", "https://techcrunch.com/"),
-    ("🌐 The Verge (Tech, AI & Gadgets)", "https://www.theverge.com/"),
+    ("🌐 TNN Tech (TNN ช่อง 16 ข่าวไอที & นวัตกรรม)", "https://www.tnnthailand.com/tech/", "https://news.google.com/rss/search?q=site:tnnthailand.com+tech&hl=th&gl=TH&ceid=TH:th"),
+    ("📱 Beartai Tech (แบไต๋ - ข่าวไอที & เทคโนโลยี)", "https://www.beartai.com/news/it-news", "https://news.google.com/rss/search?q=site:beartai.com/tech+OR+site:beartai.com/news&hl=th&gl=TH&ceid=TH:th"),
+    ("🤖 DroidSans (ดรอยด์แซนส์ - ข่าวมือถือ & Gadget)", "https://droidsans.com/", "https://news.google.com/rss/search?q=site:droidsans.com&hl=th&gl=TH&ceid=TH:th"),
+    ("💻 Techhub (เทคฮับ - ทริกไอที & นวัตกรรม)", "https://www.techhub.in.th/", "https://news.google.com/rss/search?q=site:techhub.in.th&hl=th&gl=TH&ceid=TH:th"),
+    ("📰 Thairath Tech (ไทยรัฐออนไลน์ - หมวดไอที)", "https://www.thairath.co.th/news/tech", "https://news.google.com/rss/search?q=site:thairath.co.th/news/tech+OR+site:thairath.co.th/lifestyle/tech&hl=th&gl=TH&ceid=TH:th"),
+    ("🇹🇭 Blognone (ไอที & ธุรกิจเทคโนโลยี)", "https://www.blognone.com/", "https://www.blognone.com/atom.xml"),
+    ("🌐 TechCrunch (Global Tech & Startups)", "https://techcrunch.com/", "https://techcrunch.com/category/artificial-intelligence/feed/"),
+    ("🌐 The Verge (Tech, AI & Gadgets)", "https://www.theverge.com/", "https://www.theverge.com/rss/index.xml"),
 ]
 
 PLAYLIST_SOURCES = [
@@ -528,6 +528,57 @@ def fetch_youtube_channel_videos(channel_info, max_items=20, sort_by="newest"):
             
     return videos[:max_items]
 
+def fetch_web_news_articles(src_tuple, limit=15):
+    """
+    ดึงหัวข้อข่าวและลิงก์จากเว็บไซต์ข่าว โดยรองรับ Fallback Feed/Google News RSS
+    เพื่อให้ทำงานได้สมบูรณ์ทั้งบน Local และ Streamlit Cloud (ป้องกันการโดน Geoblock หรือ Datacenter IP block)
+    """
+    web_url = src_tuple[1]
+    fallback_feed = src_tuple[2] if len(src_tuple) > 2 else ""
+    
+    articles = []
+    seen_txt = set()
+    
+    # 1. พยายามดึงแบบ Direct Scraping จากเว็บต้นทาง
+    try:
+        r = requests.get(web_url, headers=HTTP_HEADERS, timeout=8)
+        if r.status_code == 200 and len(r.text) > 1000:
+            r.encoding = 'utf-8' if 'utf-8' in (r.encoding or '').lower() else (r.apparent_encoding or 'utf-8')
+            soup = BeautifulSoup(r.text, 'html.parser')
+            for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'a']):
+                txt = tag.get_text(separator=" ", strip=True)
+                link = tag.get('href') if tag.name == 'a' else None
+                if not link and tag.find('a'):
+                    link = tag.find('a').get('href')
+                
+                if link and not link.startswith(('http://', 'https://')):
+                    link = urljoin(web_url, link)
+                
+                # ทำความสะอาดชื่อพาดหัวข่าว
+                txt = re.sub(r'^\d+(\.\d+)?[Kk]?\s*(News)?\s*', '', txt).strip()
+                if txt and len(txt) > 20 and len(txt) < 200 and txt not in seen_txt:
+                    if not any(skip in txt.lower() for skip in ['cookie', 'privacy', 'policy', 'terms', 'ติดต่อเรา', 'เข้าสู่ระบบ', 'สมัครสมาชิก', 'facebook', 'twitter', 'share', 'line', 'javascript:']):
+                        seen_txt.add(txt)
+                        articles.append({'title': txt, 'link': link or web_url})
+    except Exception:
+        pass
+
+    # 2. หาก Direct Scraping โดนบล็อก หรือได้ข่าวน้อยกว่า 3 รายการ ให้ดึงจาก Fallback RSS Feed / Google News ทันที
+    if len(articles) < 3 and fallback_feed:
+        try:
+            feed = feedparser.parse(fallback_feed)
+            for entry in feed.entries:
+                raw_t = getattr(entry, 'title', '')
+                clean_t = raw_t.rsplit(' - ', 1)[0].strip() if ' - ' in raw_t else raw_t.strip()
+                link = getattr(entry, 'link', web_url)
+                if clean_t and len(clean_t) > 15 and clean_t not in seen_txt:
+                    seen_txt.add(clean_t)
+                    articles.append({'title': clean_t, 'link': link})
+        except Exception:
+            pass
+
+    return articles[:limit]
+
 def render_tech_hub_page():
     st.markdown("#### 📺 Tech & Media Intelligence Hub")
     tab1, tab2, tab3 = st.tabs(["🌐 เว็บไซต์ข่าว", "📋 YouTube Playlists", "🎥 YouTube Channels"])
@@ -552,34 +603,7 @@ def render_tech_hub_page():
         if btn_scan or web_cache_key not in st.session_state:
             with st.spinner(f"กำลังเชื่อมต่อและดึงหัวข้อข่าวสดจาก {selected_web[0]}..."):
                 try:
-                    r = requests.get(selected_web[1], headers=HTTP_HEADERS, timeout=10)
-                    r.encoding = 'utf-8' if 'utf-8' in (r.encoding or '').lower() else (r.apparent_encoding or 'utf-8')
-                    soup = BeautifulSoup(r.text, 'html.parser')
-                    
-                    articles = []
-                    seen_txt = set()
-                    
-                    for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'a']):
-                        txt = tag.get_text(separator=" ", strip=True)
-                        link = tag.get('href') if tag.name == 'a' else None
-                        if not link and tag.find('a'):
-                            link = tag.find('a').get('href')
-                        
-                        if link and not link.startswith(('http://', 'https://')):
-                            link = urljoin(selected_web[1], link)
-                            
-                        # Clean title
-                        txt = re.sub(r'^\d+(\.\d+)?[Kk]?\s*(News)?\s*', '', txt).strip()
-                        
-                        if txt and len(txt) > 20 and len(txt) < 200 and txt not in seen_txt:
-                            if not any(skip in txt.lower() for skip in ['cookie', 'privacy', 'policy', 'terms', 'ติดต่อเรา', 'เข้าสู่ระบบ', 'สมัครสมาชิก', 'facebook', 'twitter', 'share', 'line', 'javascript:']):
-                                seen_txt.add(txt)
-                                articles.append({
-                                    'title': txt,
-                                    'link': link or selected_web[1]
-                                })
-                    
-                    st.session_state[web_cache_key] = articles[:web_limit]
+                    st.session_state[web_cache_key] = fetch_web_news_articles(selected_web, limit=web_limit)
                 except Exception as e:
                     st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
                     st.session_state[web_cache_key] = []
