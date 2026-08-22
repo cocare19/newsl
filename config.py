@@ -273,37 +273,39 @@ CUSTOM_CSS = """
         font-weight: 800 !important; color: #1D4ED8 !important; background: #EFF6FF !important;
     }
     .pl-fixture-mw {
-        font-weight: 600;
-        color: #2563EB;
-        font-size: 0.86rem;
+        font-weight: 700;
+        color: #3B82F6;
+        font-size: 0.88rem;
     }
     .pl-fixture-date {
-        font-size: 0.78rem;
-        color: #64748B;
-        margin-top: 2px;
+        font-size: 0.84rem;
+        color: #475569;
+        font-weight: 500;
+        margin-top: 3px;
     }
     .pl-fixture-team {
         color: #1E293B;
+        font-weight: 600;
     }
     .pl-badge-finished {
-        background: #10B981;
+        background: #16A34A;
         color: #FFFFFF;
-        padding: 5px 14px;
-        border-radius: 9999px;
+        padding: 5px 12px;
+        border-radius: 8px;
         font-weight: 700;
-        font-size: 0.82rem;
+        font-size: 0.84rem;
         display: inline-block;
         white-space: nowrap;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.06);
     }
     .pl-badge-upcoming {
         background: #F8FAFC;
         color: #1E293B;
-        border: 1px solid #E2E8F0;
-        padding: 5px 14px;
-        border-radius: 9999px;
+        border: 1px solid #CBD5E1;
+        padding: 5px 12px;
+        border-radius: 8px;
         font-weight: 600;
-        font-size: 0.80rem;
+        font-size: 0.82rem;
         display: inline-block;
         white-space: nowrap;
     }

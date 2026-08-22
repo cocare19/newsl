@@ -645,13 +645,8 @@ def fetch_skysports_standings():
 # ==============================================================================
 # 5. ระบบดึงและสร้างโปรแกรมการแข่งขันพรีเมียร์ลีกครบทั้งฤดูกาล (38 MATCHWEEKS)
 # ==============================================================================
-def get_day_suffix(day_num):
-    if 11 <= day_num <= 13:
-        return 'th'
-    return {1: 'st', 2: 'nd', 3: 'rd'}.get(day_num % 10, 'th')
-
 def convert_to_thai_datetime(date_str, time_str):
-    """แปลงวันและเวลาแข่ง UK (e.g. 'Monday 24th August', '8.00pm' หรือ '20:00') เป็นวันและเวลาไทย (+6 ชม. BST)
+    """แปลงวันและเวลาแข่ง UK (e.g. 'Monday 24 August', '8.00pm' หรือ '20:00') เป็นวันและเวลาไทย (+6 ชม. BST)
        โดยถ้าข้ามเที่ยงคืน (เช่น เตะ 20:00 UK -> 02:00 น. ไทย) จะปรับวันเป็นวันถัดไปให้อัตโนมัติ"""
     try:
         clean_date = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', date_str.strip())
@@ -675,16 +670,16 @@ def convert_to_thai_datetime(date_str, time_str):
                 continue
                 
         if not dt:
-            return date_str, f"{t_obj.strftime('%H:%M')} น."
+            return clean_date, f"{t_obj.strftime('%H:%M')} น."
             
         # BST (UTC+1) to Thai Time (UTC+7) = +6 Hours
         thai_dt = dt + timedelta(hours=6)
-        suffix = get_day_suffix(thai_dt.day)
-        thai_date_str = thai_dt.strftime(f'%A {thai_dt.day}{suffix} %B')
+        thai_date_str = thai_dt.strftime(f'%A {thai_dt.day} %B')
         thai_time_str = f"{thai_dt.strftime('%H:%M')} น."
         return thai_date_str, thai_time_str
     except Exception:
-        return date_str, (f"{time_str} น." if time_str else "")
+        clean_fallback = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', str(date_str).strip())
+        return clean_fallback, (f"{time_str} น." if time_str else "")
 
 @st.cache_data(ttl=60)
 def fetch_skysports_fixtures():
@@ -814,10 +809,8 @@ def fetch_skysports_fixtures():
         mw_name = f"Matchweek {mw_idx}"
         match_sat = start_date + timedelta(weeks=mw_idx - 1)
         match_sun = match_sat + timedelta(days=1)
-        suffix_sat = get_day_suffix(match_sat.day)
-        suffix_sun = get_day_suffix(match_sun.day)
-        sat_date_str = match_sat.strftime(f'%A {match_sat.day}{suffix_sat} %B')
-        sun_date_str = match_sun.strftime(f'%A {match_sun.day}{suffix_sun} %B')
+        sat_date_str = match_sat.strftime(f'%A {match_sat.day} %B')
+        sun_date_str = match_sun.strftime(f'%A {match_sun.day} %B')
 
         for m_idx, (home, away) in enumerate(round_matches):
             default_date = sat_date_str if m_idx < 6 else sun_date_str
