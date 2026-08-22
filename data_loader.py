@@ -696,7 +696,7 @@ def fetch_skysports_fixtures():
                         elif time_el and time_el.text.strip():
                             raw_time = time_el.text.strip()
                             thai_time = convert_to_thai_time(raw_time)
-                            status_display = f"⏰ {thai_time} ({raw_time})"
+                            status_display = f"⏰ {thai_time}"
                             is_live_or_ft = False
                         elif status_el and status_el.text.strip():
                             status_display = status_el.text.strip()
