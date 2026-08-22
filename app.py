@@ -2,13 +2,15 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import urllib.parse
+import re
 from bs4 import BeautifulSoup
 import requests
 from datetime import datetime
 import pytz
 
 # นำเข้าโมดูลย่อยและโมดูล RSS ที่แยกออกมา
-from config import CUSTOM_CSS
+from config import CUSTOM_CSS, load_api_keys
+from ai_engine import smart_gemini_generate
 from data_loader import (
     fetch_gold_and_spot_data, fetch_thai_oil, get_historical_thai_oil_data,
     fetch_real_historical_oil_table, fetch_today_oil_all_brands,
@@ -16,19 +18,18 @@ from data_loader import (
     fetch_skysports_fixtures
 )
 from rss_module import render_rss_page
-from tech_hub_module import render_tech_hub_page  # Media & Playlist Module
-
-st.set_page_config(page_title="NewsL Lite Matrix", page_icon="⚡", layout="wide")
+from tech_hub_module import render_tech_hub_page  # Tech Hub & Playlist Module
+st.set_page_config(page_title="NewsX AI Matrix", page_icon="⚡", layout="wide")
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# --- ระบบล็อกรหัสผ่านความปลอดภัย (Private Password Gatekeeper) ---
-target_pwd = st.secrets.get("APP_PASSWORD", "9999")
+# --- ระบบล็อกรหัสผ่านความปลอดภัยสูงสุด (Private Password Gatekeeper) ---
+target_pwd = st.secrets.get("APP_PASSWORD", "8888")
 if not st.session_state.get("authenticated", False):
     st.markdown("""
         <div style='max-width: 460px; margin: 60px auto 10px auto; text-align: center;'>
             <div style='font-size: 3.2rem; margin-bottom: 8px;'>⚡</div>
             <h2 style='margin-bottom: 6px; font-weight: 800; background: linear-gradient(135deg, #0284C7 0%, #2563EB 50%, #6366F1 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>
-                NewsL • Real-Time Hub
+                NewsX AI Nexus
             </h2>
             <p style='color: #64748B; font-size: 0.88rem; margin-bottom: 25px;'>
                 🔒 Private Intelligence Matrix • กรุณากรอกรหัสผ่านเพื่อเข้าใช้งาน
@@ -53,16 +54,20 @@ if not st.session_state.get("authenticated", False):
     st.stop()
 
 # เมนูนำทางด้านข้าง
+api_pool = load_api_keys()
 with st.sidebar:
     st.markdown("""
         <div style='margin-bottom: 10px;'>
             <div style='display: flex; align-items: center; gap: 8px;'>
                 <span style='font-size: 1.35rem;'>⚡</span>
-                <span style='font-size: 1.20rem; font-weight: 700; color: #0F172A; letter-spacing: -0.01em;'>NewsL Real-Time Hub</span>
+                <span style='font-size: 1.20rem; font-weight: 700; color: #0F172A; letter-spacing: -0.01em;'>NewsX AI Nexus</span>
             </div>
-            <p style='color: #10B981; font-size: 0.76rem; font-weight: 600; margin: 4px 0 0 2px;'>🟢 100% Free • Zero-API-Key Mode</p>
         </div>
     """, unsafe_allow_html=True)
+    if api_pool:
+        st.success(f"🔒 AI Ready ({len(api_pool)} Keys)")
+    else:
+        st.error("⚠️ ไม่พบ API Key")
 
     st.markdown("<p style='font-size: 0.75rem; font-weight: 700; color: #64748b; margin-top: 12px; margin-bottom: 6px;'>NAVIGATION MENU</p>", unsafe_allow_html=True)
     menu_selection = st.radio(
@@ -71,8 +76,11 @@ with st.sidebar:
             "📈 1. Real-Time Market & Pricing",
             "🏆 2. Premier League Tables",
             "📅 3. Premier League Fixtures",
-            "📡 4. Curated RSS Feeds",
-            "📺 5. Media & Video Hub"
+            "🌐 4. AI Search Grounding",
+            "📡 5. Curated RSS Feeds",
+            "🔗 6. Deep URL Inspector",
+            "☕ 7. Daily Executive Brief",
+            "📺 8. Tech & Video Hub"
         ]
     )
 
@@ -127,14 +135,18 @@ st.markdown("""
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 2px;">
             <span style="font-size: 1.6rem; line-height: 1;">⚡</span>
             <span style="font-size: 1.55rem; font-weight: 800; letter-spacing: -0.02em; background: linear-gradient(135deg, #0284C7 0%, #2563EB 45%, #6366F1 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-                NewsL • Real-Time Intelligence Matrix
+                NewsX • AI Intelligence Matrix
             </span>
         </div>
         <p style="color: #64748B; font-size: 0.88rem; margin: 0; padding-left: 2px; font-weight: 400;">
-            ระบบศูนย์ข้อมูลและสารสนเทศเรียลไทม์รอบโลก (100% Free • Zero-API-Key Edition)
+            ระบบสรุป สังเคราะห์ และวิเคราะห์ข้อมูลสารสนเทศอัจฉริยะ (Next-Gen Modular Edition)
         </p>
     </div>
 """, unsafe_allow_html=True)
+
+if not api_pool:
+    st.warning("กรุณาตั้งค่า API Key ใน `.streamlit/secrets.toml` ก่อนเริ่มใช้งาน")
+    st.stop()
 
 # --- 1. REAL-TIME MARKET ---
 if menu_selection == "📈 1. Real-Time Market & Pricing":
@@ -717,7 +729,7 @@ elif menu_selection == "🏆 2. Premier League Tables":
 # --- 3. PREMIER LEAGUE FIXTURES & SCORES ---
 elif menu_selection == "📅 3. Premier League Fixtures":
     st.markdown("#### 📅 Premier League Fixtures & Live Scores")
-    st.caption("ผลการแข่งขันและตารางถ่ายทอดสดพรีเมียร์ลีก (Sky Sports Live Feed แปลงเป็นเวลาไทย BKK)")
+    st.caption("โปรแกรมการแข่งขันและผลบอลพรีเมียร์ลีกครบทั้งฤดูกาล 38 สัปดาห์ (เวลามาตรฐานประเทศไทย BKK)")
 
     t3_c1, t3_c2 = st.columns([3.5, 8.5])
     with t3_c1:
@@ -731,9 +743,9 @@ elif menu_selection == "📅 3. Premier League Fixtures":
     if not df_all_fixtures.empty:
         ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([2, 2, 1])
         with ctrl_col1:
-            all_dates = list(dict.fromkeys(df_all_fixtures['Date'].tolist()))
-            date_options = ["🌟 แสดงทุกวันที่ (All Dates)"] + all_dates
-            selected_date = st.selectbox("📅 เลือกวันที่แข่งขัน:", date_options, key="pl_date_selector")
+            mw_list = sorted(list(df_all_fixtures['MW'].unique()), key=lambda x: int(x.split()[1]))
+            mw_options = ["🌟 แสดงทุกสัปดาห์ (All Matchweeks)"] + mw_list
+            selected_mw = st.selectbox("📅 เลือกสัปดาห์การแข่งขัน:", mw_options, key="pl_mw_selector")
         with ctrl_col2:
             search_team = st.text_input("🔍 ค้นหาทีมโปรด:", placeholder="พิมพ์ เช่น Arsenal, Man Utd, Liverpool...", key="pl_team_search")
         with ctrl_col3:
@@ -743,8 +755,8 @@ elif menu_selection == "📅 3. Premier League Fixtures":
 
         st.markdown("---")
         df_filtered = df_all_fixtures.copy()
-        if selected_date != "🌟 แสดงทุกวันที่ (All Dates)":
-            df_filtered = df_filtered[df_filtered['Date'] == selected_date]
+        if selected_mw != "🌟 แสดงทุกสัปดาห์ (All Matchweeks)":
+            df_filtered = df_filtered[df_filtered['MW'] == selected_mw]
         if search_team:
             df_filtered = df_filtered[
                 df_filtered['Home'].str.contains(search_team, case=False, na=False) | 
@@ -758,7 +770,6 @@ elif menu_selection == "📅 3. Premier League Fixtures":
                 a_badge = f"<img src='{row['AwayBadge']}' style='width:20px;height:20px;vertical-align:middle;margin-left:6px;object-fit:contain;' onerror=\"this.style.display='none'\">" if row.get('AwayBadge') else ""
                 
                 status_val = str(row.get('Status', ''))
-                is_fin = row.get('IsFinished', False)
                 
                 if "⚽" in status_val or "(FT)" in status_val:
                     # ผลบอลจบแล้วหรือสด
@@ -771,7 +782,8 @@ elif menu_selection == "📅 3. Premier League Fixtures":
 
                 row_html = (
                     f"<tr>"
-                    f"<td style='padding:8px 4px;font-size:0.80rem;color:#475569;font-weight:600;white-space:nowrap;width:150px;text-align:left;'>{row['Date']}</td>"
+                    f"<td style='padding:8px 6px;font-size:0.80rem;color:#475569;font-weight:600;white-space:nowrap;width:160px;text-align:left;'>"
+                    f"<span style='color:#2563EB;font-size:0.75rem;display:block;'>{row['MW']}</span>{row['Date']}</td>"
                     f"<td style='padding:8px 6px;text-align:right;font-weight:600;width:35%;white-space:nowrap;'>{row['Home']}{h_badge}</td>"
                     f"<td style='padding:8px 4px;text-align:center;width:180px;'>{status_badge}</td>"
                     f"<td style='padding:8px 6px;text-align:left;font-weight:600;width:35%;white-space:nowrap;'>{a_badge}{row['Away']}</td>"
@@ -784,7 +796,7 @@ elif menu_selection == "📅 3. Premier League Fixtures":
                 "<div class='pl-table-container' style='overflow-x:auto;'>"
                 "<table class='pl-table' style='width:100%;border-collapse:collapse;'>"
                 "<thead><tr style='background:#F8FAFC;border-bottom:2px solid #E2E8F0;'>"
-                "<th style='width:150px;text-align:left;padding:8px 4px;'>วัน/เวลาแข่ง</th>"
+                "<th style='width:160px;text-align:left;padding:8px 6px;'>สัปดาห์ / วันแข่ง</th>"
                 "<th style='text-align:right;padding-right:12px;'>เจ้าบ้าน (Home)</th>"
                 "<th style='text-align:center;width:180px;'>ผลบอล / เวลา Kickoff (ไทย)</th>"
                 "<th style='text-align:left;padding-left:12px;'>ทีมเยือน (Away)</th>"
@@ -798,11 +810,161 @@ elif menu_selection == "📅 3. Premier League Fixtures":
     else:
         st.warning("⚠️ กำลังโหลดข้อมูลโปรแกรมการแข่งขันจาก Sky Sports หรือไม่สามารถเชื่อมต่อได้ในขณะนี้")
 
+# --- 4. AI SEARCH GROUNDING ---
+elif menu_selection == "🌐 4. AI Search Grounding":
+    st.markdown("#### 🌐 ค้นหาข้อมูลสดรอบโลกและสังเคราะห์บทความเชิงลึก")
+    col1, col2 = st.columns([3.5, 1])
+    with col1:
+        search_prompt = st.text_input("ระบุหัวข้อที่ต้องการสืบค้นและวิเคราะห์:", value="สรุปข่าวเปิดตัว AI Model ใหม่ล่าสุด")
+    with col2:
+        st.write("")
+        st.write("")
+        btn_search = st.button("🔍 ค้นหาและเขียนบทความ", key="btn_tab1")
 
-# --- 4. CURATED RSS FEEDS ---
-elif menu_selection == "📡 4. Curated RSS Feeds":
-    render_rss_page()
+    if btn_search and search_prompt:
+        with st.spinner("กำลังค้นหาข้อมูลสดจากเว็บและเรียบเรียงบทความเชิงลึก..."):
+            encoded_query = urllib.parse.quote(search_prompt)
+            import feedparser
+            feed = feedparser.parse(f"https://news.google.com/rss/search?q={encoded_query}&hl=th&gl=TH&ceid=TH:th")
+            search_context = []
+            extracted_sources = []
+            if feed.entries:
+                for entry in feed.entries[:6]:
+                    search_context.append(f"- หัวข้อ: {entry.title}\n  รายละเอียด: {getattr(entry, 'description', '')}")
+                    extracted_sources.append({"title": entry.title, "link": entry.link})
 
-# --- 5. MEDIA & VIDEO HUB ---
-elif menu_selection == "📺 5. Media & Video Hub":
+            raw_text = "\n\n".join(search_context)
+            prompt_to_ai = f"""
+            คุณคือบรรณาธิการข่าว จงเขียนบทความวิเคราะห์เชิงลึกในหัวข้อ: "{search_prompt}" โดยใช้ข้อมูล: {raw_text}
+            โครงสร้าง: 📌 1. ภาพรวมและบริบท 🔍 2. เจาะลึกประเด็นสำคัญ 💡 3. บทวิเคราะห์ผลกระทบ
+            """
+            res_text, model_info = smart_gemini_generate(prompt_to_ai, task_level="lite")
+            st.session_state['tab1_res'] = res_text
+            st.session_state['tab1_mod'] = model_info
+            st.session_state['tab1_src'] = extracted_sources
+
+    if 'tab1_res' in st.session_state:
+        st.markdown("<div class='content-box'>", unsafe_allow_html=True)
+        st.markdown("### 📰 บทความวิเคราะห์สารสนเทศเชิงลึก")
+        st.markdown(st.session_state['tab1_res'])
+        st.markdown(f"<div class='model-tag'>ประมวลผลด้วย: {st.session_state['tab1_mod']}</div>", unsafe_allow_html=True)
+        if st.session_state.get('tab1_src'):
+            st.markdown("<div class='source-container'><b>🔗 แหล่งอ้างอิง:</b><br>", unsafe_allow_html=True)
+            for idx, s in enumerate(st.session_state['tab1_src']):
+                st.markdown(f"{idx+1}. [{s['title']}]({s['link']})")
+            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# --- 5. CURATED RSS FEEDS (Modularized) ---
+elif menu_selection == "📡 5. Curated RSS Feeds":
+    render_rss_page(smart_gemini_generate)
+
+# --- 6. DEEP URL INSPECTOR ---
+elif menu_selection == "🔗 6. Deep URL Inspector":
+    st.markdown("#### 🔗 ถอดรหัสและวิเคราะห์เนื้อหาจาก URL")
+    target_url = st.text_input("วาง URL ของหน้าเว็บที่ต้องการให้อ่าน:")
+    if st.button("🧠 สแกนและเรียบเรียงบทความ", key="btn_tab3") and target_url:
+        with st.spinner("กำลังอ่านและสกัดสารัตถะ..."):
+            try:
+                resp = requests.get(target_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}, timeout=10)
+                resp.encoding = resp.apparent_encoding or 'utf-8'
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'noscript', 'aside', 'iframe', 'svg']):
+                    tag.decompose()
+                text_parts = [p.get_text(strip=True) for p in soup.find_all(['p', 'h1', 'h2', 'h3', 'article'])]
+                text = " ".join([t for t in text_parts if len(t) > 5])
+                text = re.sub(r'\s+', ' ', text).strip()[:10000]
+                if not text:
+                    st.warning("⚠️ ไม่พบข้อความที่สามารถอ่านได้จาก URL นี้")
+                else:
+                    prompt = f"เขียนบทสรุปสาระสำคัญเชิงลึกเป็นภาษาไทย จัดรูปแบบด้วย Markdown ให้อ่านง่าย:\n{text}"
+                    res, mod = smart_gemini_generate(prompt, task_level="lite")
+                    st.session_state['tab3_res'] = res
+                    st.session_state['tab3_mod'] = mod
+                    st.session_state['tab3_url'] = target_url
+            except Exception as e:
+                st.error(f"เกิดข้อผิดพลาด: {str(e)}")
+
+    if 'tab3_res' in st.session_state:
+        st.markdown("<div class='content-box'><h3>📑 สรุปสาระสำคัญ</h3>", unsafe_allow_html=True)
+        st.markdown(st.session_state['tab3_res'])
+        st.markdown(f"<div class='model-tag'>ประมวลผลด้วย: {st.session_state['tab3_mod']}</div>", unsafe_allow_html=True)
+        st.write("")
+        st.link_button("🌐 เปิดลิงก์ต้นฉบับ", st.session_state['tab3_url'])
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# --- 7. DAILY EXECUTIVE BRIEF ---
+elif menu_selection == "☕ 7. Daily Executive Brief":
+    st.markdown("#### ☕ Daily Executive Morning Dossier")
+    st.caption("ระบบสรุปและวิเคราะห์รายงานข่าวกรองรอบโลกฉบับเต็ม สำหรับผู้บริหาร (In-Depth Executive Intelligence Report)")
+
+    col_btn1, col_btn2 = st.columns([2, 1])
+    with col_btn1:
+        btn_brief = st.button("⚡ สังเคราะห์รายงานข่าวกรองสดฉบับเต็มวันนี้ (Long-Form)", key="btn_tab4")
+
+    if btn_brief:
+        with st.spinner("กำลังกวาดฟีดข่าวกรองสดและเรียบเรียงบทความฉบับเต็ม (800-1200 คำ)..."):
+            import feedparser
+            sources = {
+                "🤖 AI & Deep Tech": "https://techcrunch.com/category/artificial-intelligence/feed/",
+                "💻 Global Tech": "https://www.theverge.com/rss/index.xml",
+                "🔴 Liverpool FC & Sports": "https://feeds.bbci.co.uk/sport/football/teams/liverpool/rss.xml",
+                "📈 Markets & Macro": "https://www.ft.com/markets?format=rss"
+            }
+            news_items = []
+            links = []
+            
+            for cat, u in sources.items():
+                try:
+                    f = feedparser.parse(u)
+                    if f.entries:
+                        for e in f.entries[:3]:
+                            desc = getattr(e, 'description', '') or getattr(e, 'summary', '')
+                            # Clean HTML tags in description if any
+                            clean_desc = BeautifulSoup(desc, "html.parser").get_text()[:400]
+                            news_items.append(f"[{cat}] หัวข้อ: {e.title}\nรายละเอียด: {clean_desc}\n")
+                            links.append({"cat": cat, "title": e.title, "link": e.link})
+                except Exception:
+                    pass
+
+            raw_dossier_text = "\n".join(news_items)
+            
+            detailed_executive_prompt = f"""
+            คุณคือหัวหน้านักวิเคราะห์ข่าวกรองและบรรณาธิการบริหารชั้นสูง (Chief Intelligence Officer)
+            จงอ่านชุดข้อมูลข่าวสดประจำวันต่อไปนี้ แล้วเขียนเป็น 'รายงานข่าวกรองและบทวิเคราะห์เชิงลึกฉบับเต็มสำหรับผู้บริหาร' (Comprehensive Executive Dossier) 
+            
+            ข้อมูลข่าวสดล่าสุด:
+            {raw_dossier_text}
+
+            ข้อกำหนดและมาตรฐานการเขียน:
+            1. เขียนบทความให้ยาวและละเอียดลึกซึ้ง (ความยาวประมาณ 800 - 1,200 คำ) ขยายความทุกประเด็นให้เห็นภาพชัดเจน อ่านรู้เรื่อง ครบถ้วน จบในที่เดียว
+            2. ห้ามสรุปสั้นเป็นข้อความผ่านๆ ให้เขียนบรรยายและวิเคราะห์อย่างเข้มข้น มีเนื้อหาสาระและตัวอย่างประกอบ
+            3. จัดโครงสร้างรายงานอย่างเป็นระบบตามหัวข้อดังนี้:
+               - 📌 **1. Executive Summary & Strategic Landscape (ภาพรวมยุทธศาสตร์ประจำวัน)**: สรุปภาพรวมของสถานการณ์โลกและจุดเชื่อมโยงสำคัญ
+               - 🤖 **2. AI & Deep Tech Frontier (เจาะลึกความเคลื่อนไหวปัญญาประดิษฐ์และบิ๊กเทค)**: วิเคราะห์ความเคลื่อนไหวของโมเดล AI นวัตกรรม และผลกระทบต่ออุตสาหกรรม
+               - 💻 **3. Global Innovation & Market Dynamics (นวัตกรรมระดับโลกและการขับเคลื่อนธุรกิจ)**: รายละเอียดเหตุการณ์สำคัญในแวดวงไอทีและเศรษฐกิจ
+               - 🔴 **4. Sports & Football Intelligence (รายงานข่าวกรองกีฬาและสโมสรลิเวอร์พูล)**: อัปเดตความเคลื่อนไหว ผลงาน และประเด็นสำคัญในวงการกีฬา
+               - 💡 **5. Strategic Takeaways & Outlook (บทสรุปเชิงกลยุทธ์และทิศทางที่ต้องจับตามอง)**: ข้อคิดเห็นและแนวโน้มที่ผู้บริหารควรเตรียมรับมือ
+            4. ใช้ภาษาไทยระดับทางการ สละสลวย เฉียบคม และน่าติดตาม
+            """
+            
+            res, mod = smart_gemini_generate(detailed_executive_prompt, task_level="deep")
+            st.session_state['tab4_res'] = res
+            st.session_state['tab4_mod'] = mod
+            st.session_state['tab4_src'] = links
+
+    if 'tab4_res' in st.session_state:
+        st.markdown("<div class='content-box'>", unsafe_allow_html=True)
+        st.markdown("### 📋 รายงานข่าวกรองและบทวิเคราะห์สดประจำวัน (Executive Dossier)")
+        st.markdown(st.session_state['tab4_res'])
+        st.markdown(f"<div class='model-tag'>ประมวลผลด้วย: {st.session_state['tab4_mod']}</div>", unsafe_allow_html=True)
+        if st.session_state.get('tab4_src'):
+            st.markdown("<div class='source-container'><b>🔗 แหล่งข่าวกรองอ้างอิงสด (Live Sources):</b><br>", unsafe_allow_html=True)
+            for idx, s in enumerate(st.session_state['tab4_src']):
+                st.markdown(f"{idx+1}. **[{s['cat']}]** [{s['title']}]({s['link']})")
+            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# --- 8. TECH & VIDEO HUB ---
+elif menu_selection == "📺 8. Tech & Video Hub":
     render_tech_hub_page()
