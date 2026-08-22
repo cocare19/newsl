@@ -645,21 +645,50 @@ def fetch_skysports_standings():
 # ==============================================================================
 # 5. ระบบดึงโปรแกรมการแข่งขันและผลบอลพรีเมียร์ลีกสดตรงจาก Sky Sports Live Feed
 # ==============================================================================
-def convert_to_thai_time(time_str):
-    """แปลงเวลา UK (e.g. 12.30pm, 3.00pm, 8.00pm) เป็นเวลาไทย (+6 ชม. BST)"""
+def get_day_suffix(day_num):
+    if 11 <= day_num <= 13:
+        return 'th'
+    return {1: 'st', 2: 'nd', 3: 'rd'}.get(day_num % 10, 'th')
+
+def convert_to_thai_datetime(date_str, time_str):
+    """แปลงวันและเวลาแข่ง UK (e.g. 'Monday 24th August', '8.00pm' หรือ '20:00') เป็นวันและเวลาไทย (+6 ชม. BST)
+       โดยถ้าข้ามเที่ยงคืน (เช่น เตะ 20:00 UK -> 02:00 น. ไทย) จะปรับวันเป็นวันถัดไปให้อัตโนมัติ"""
     try:
-        clean = time_str.strip().lower().replace('.', ':')
-        t = datetime.strptime(clean, "%I:%M%p")
+        clean_date = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', date_str.strip())
+        current_year = datetime.now().year
+        
+        clean_time = time_str.strip().lower().replace('.', ':')
+        if 'am' in clean_time or 'pm' in clean_time:
+            t_obj = datetime.strptime(clean_time, '%I:%M%p')
+        else:
+            t_obj = datetime.strptime(clean_time, '%H:%M')
+            
+        time_hm = t_obj.strftime("%H:%M")
+        full_dt_str = f"{clean_date} {current_year} {time_hm}"
+        
+        dt = None
+        for fmt in ('%A %d %B %Y %H:%M', '%d %B %Y %H:%M', '%A %d %b %Y %H:%M', '%d %b %Y %H:%M'):
+            try:
+                dt = datetime.strptime(full_dt_str, fmt)
+                break
+            except ValueError:
+                continue
+                
+        if not dt:
+            return date_str, f"{t_obj.strftime('%H:%M')} น."
+            
         # BST (UTC+1) to Thai Time (UTC+7) = +6 Hours
-        hour = (t.hour + 6) % 24
-        minute = t.minute
-        return f"{hour:02d}:{minute:02d} น."
+        thai_dt = dt + timedelta(hours=6)
+        suffix = get_day_suffix(thai_dt.day)
+        thai_date_str = thai_dt.strftime(f'%A {thai_dt.day}{suffix} %B')
+        thai_time_str = f"{thai_dt.strftime('%H:%M')} น."
+        return thai_date_str, thai_time_str
     except Exception:
-        return time_str
+        return date_str, (f"{time_str} น." if time_str else "")
 
 @st.cache_data(ttl=60)
 def fetch_skysports_fixtures():
-    """ดึงตารางโปรแกรมการแข่งขันและผลการแข่งขันจริงสดตรงจาก Sky Sports Live Feed"""
+    """ดึงตารางโปรแกรมการแข่งขันและผลการแข่งขันจริงสดตรงจาก Sky Sports Live Feed พร้อมคำนวณวันและเวลาไทยที่ถูกต้อง"""
     url = "https://www.skysports.com/premier-league-scores-fixtures"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -676,13 +705,31 @@ def fetch_skysports_fixtures():
             for grp in groups:
                 # ค้นหาวันที่จาก header h2 ด้านบนของแต่ละกลุ่มการแข่งขัน
                 h2_el = grp.find_previous(['h2', 'h3'])
-                date_text = h2_el.text.strip() if h2_el else "โปรแกรมการแข่งขัน"
+                header_date = h2_el.text.strip() if h2_el else "โปรแกรมการแข่งขัน"
                 
                 # ดึงทุกคู่การแข่งขันในกลุ่มวันนั้น
                 for m in grp.select('.ui-sport-match-score'):
+                    state_str = m.get('data-state')
+                    match_date = header_date
+                    match_time = ""
+                    if state_str:
+                        try:
+                            s = json.loads(state_str)
+                            st_info = s.get('start', {})
+                            match_date = st_info.get('date', header_date)
+                            match_time = st_info.get('time12hr') or st_info.get('time') or ""
+                        except Exception:
+                            pass
+                    
+                    if not match_time:
+                        time_el = m.select_one('.ui-sport-match-score__start-time, .ui-sport-match-score__status-match-time')
+                        if time_el:
+                            match_time = time_el.text.strip()
+
+                    thai_date, thai_time = convert_to_thai_datetime(match_date, match_time) if match_time else (match_date, "")
+
                     teams = [t.text.strip() for t in m.select('.ui-sport-match-score__team-name')]
                     scores = [s.text.strip() for s in m.select('.ui-sport-match-score__score')]
-                    time_el = m.select_one('.ui-sport-match-score__start-time, .ui-sport-match-score__status-match-time')
                     status_el = m.select_one('.ui-sport-match-score__status')
                     
                     if len(teams) >= 2:
@@ -693,9 +740,7 @@ def fetch_skysports_fixtures():
                         if len(clean_scores) >= 2:
                             status_display = f"⚽ {clean_scores[0]} - {clean_scores[1]} (FT)"
                             is_live_or_ft = True
-                        elif time_el and time_el.text.strip():
-                            raw_time = time_el.text.strip()
-                            thai_time = convert_to_thai_time(raw_time)
+                        elif thai_time:
                             status_display = f"⏰ {thai_time}"
                             is_live_or_ft = False
                         elif status_el and status_el.text.strip():
@@ -706,7 +751,7 @@ def fetch_skysports_fixtures():
                             is_live_or_ft = False
                             
                         fixtures_list.append({
-                            "Date": date_text,
+                            "Date": thai_date,
                             "Home": home,
                             "HomeBadge": get_club_logo(home),
                             "Status": status_display,
