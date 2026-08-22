@@ -272,10 +272,40 @@ CUSTOM_CSS = """
     .pl-pts-col {
         font-weight: 800 !important; color: #1D4ED8 !important; background: #EFF6FF !important;
     }
-    .pl-status-badge {
-        background: #EFF6FF; color: #1D4ED8; border: 1px solid #DBEAFE;
-        border-radius: 4px; font-weight: 700; padding: 2px 6px; font-size: 0.76rem;
-        display: inline-block; white-space: nowrap;
+    .pl-fixture-mw {
+        font-weight: 600;
+        color: #2563EB;
+        font-size: 0.86rem;
+    }
+    .pl-fixture-date {
+        font-size: 0.78rem;
+        color: #64748B;
+        margin-top: 2px;
+    }
+    .pl-fixture-team {
+        color: #1E293B;
+    }
+    .pl-badge-finished {
+        background: #10B981;
+        color: #FFFFFF;
+        padding: 5px 14px;
+        border-radius: 9999px;
+        font-weight: 700;
+        font-size: 0.82rem;
+        display: inline-block;
+        white-space: nowrap;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .pl-badge-upcoming {
+        background: #F8FAFC;
+        color: #1E293B;
+        border: 1px solid #E2E8F0;
+        padding: 5px 14px;
+        border-radius: 9999px;
+        font-weight: 600;
+        font-size: 0.80rem;
+        display: inline-block;
+        white-space: nowrap;
     }
 
     /* --- Dark Mode Auto Support (Mobile & Desktop) --- */
@@ -303,6 +333,10 @@ CUSTOM_CSS = """
         .pl-table tr:hover { background-color: #1F2937 !important; }
         .pl-pts-col { color: #60A5FA !important; background: rgba(37, 99, 235, 0.18) !important; }
         .pl-status-badge { background: rgba(37, 99, 235, 0.20) !important; color: #60A5FA !important; border-color: rgba(37, 99, 235, 0.40) !important; }
+        .pl-fixture-mw { color: #60A5FA !important; }
+        .pl-fixture-date { color: #94A3B8 !important; }
+        .pl-fixture-team { color: #F1F5F9 !important; }
+        .pl-badge-upcoming { background: #1E293B !important; color: #F1F5F9 !important; border-color: #374151 !important; }
     }
 </style>
 """

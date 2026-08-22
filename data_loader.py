@@ -696,6 +696,9 @@ def fetch_skysports_fixtures():
         "Manchester City", "Manchester United", "Newcastle United", "Nottingham Forest", "Sunderland", "Tottenham Hotspur"
     ]
 
+    def norm(name):
+        return name.lower().replace(' ', '').replace('fc', '').replace('and', '&')
+
     # ดึงผลบอลสดและเวลาเตะจริงจาก Sky Sports Feed
     live_data = {}
     try:
@@ -755,7 +758,7 @@ def fetch_skysports_fixtures():
     except Exception:
         pass
 
-    # กำหนดคู่แข่งขันจริงของ Matchweek 1 และ 2 ตามตารางพรีเมียร์ลีก
+    # กำหนดคู่แข่งขันจริงของ Matchweek 1 ตามตารางเปิดฤดูกาลพรีเมียร์ลีก
     mw1_matches = [
         ("Arsenal", "Coventry City"),
         ("Hull City", "Manchester United"),
@@ -768,67 +771,68 @@ def fetch_skysports_fixtures():
         ("Newcastle United", "Liverpool"),
         ("Fulham", "Chelsea")
     ]
-    mw2_matches = [
-        ("Crystal Palace", "Manchester City"),
-        ("Liverpool", "Nottingham Forest"),
-        ("Bournemouth", "Everton"),
-        ("Coventry City", "Hull City"),
-        ("Tottenham Hotspur", "Newcastle United"),
-        ("Chelsea", "Brighton and Hove Albion"),
-        ("Leeds United", "Brentford"),
-        ("Sunderland", "Fulham"),
-        ("Manchester United", "Ipswich Town"),
-        ("Aston Villa", "Arsenal")
-    ]
 
-    n = len(teams)
-    rounds = [mw1_matches, mw2_matches]
-    
-    # คำนวณโปรแกรมการแข่งขันครบ 19 นัดแรก (เลกแรก)
-    pool = [t for t in teams]
-    for r in range(17):
+    # สร้างโปรแกรมแข่งขัน 19 สัปดาห์แรก (190 คู่ไม่ซ้ำกันอย่างสมบูรณ์แบบ) โดยใช้ Circle Method
+    t_pool = []
+    for h, a in mw1_matches:
+        t_pool.append(h)
+    for h, a in reversed(mw1_matches):
+        t_pool.append(a)
+
+    n = len(t_pool)
+    r19 = []
+    pool = list(t_pool)
+    for r in range(n - 1):
+        if r == 0:
+            r19.append(list(mw1_matches))
+            pool.insert(1, pool.pop())
+            continue
         mid = n // 2
         l1 = pool[:mid]
-        l2 = pool[mid:]
-        l2.reverse()
-        matchups = []
+        l2 = pool[mid:][::-1]
+        matches = []
         for i in range(mid):
-            if r % 2 == 1:
-                matchups.append((l2[i], l1[i]))
+            if (r + i) % 2 == 1:
+                matches.append((l1[i], l2[i]))
             else:
-                matchups.append((l1[i], l2[i]))
-        rounds.append(matchups)
+                matches.append((l2[i], l1[i]))
+        r19.append(matches)
         pool.insert(1, pool.pop())
 
-    # สลับทีมเหย้า-เยือนสำหรับ 19 นัดหลัง (เลกสอง) รวมเป็นครบ 38 แมตช์วีค
-    second_half = []
-    for r in rounds:
-        matchups = [(away, home) for (home, away) in r]
-        second_half.append(matchups)
+    # เลกสอง (สัปดาห์ 20-38) สลับทีมเหย้า-เยือน ครบ 38 สัปดาห์ (380 แมตช์)
+    second_19 = []
+    for r in r19:
+        second_19.append([(away, home) for (home, away) in r])
 
-    full_38_rounds = rounds + second_half
+    full_38_rounds = r19 + second_19
 
     start_date = datetime(2026, 8, 22)
     time_slots = ["18:30 น.", "21:00 น.", "21:00 น.", "21:00 น.", "23:30 น.", "20:00 น.", "20:00 น.", "22:30 น.", "02:00 น.", "02:00 น."]
     fixtures_list = []
 
-    def norm(name):
-        return name.lower().replace(' ', '').replace('fc', '').replace('and', '&')
-
     for mw_idx, round_matches in enumerate(full_38_rounds, 1):
         mw_name = f"Matchweek {mw_idx}"
         match_sat = start_date + timedelta(weeks=mw_idx - 1)
         match_sun = match_sat + timedelta(days=1)
+        suffix_sat = get_day_suffix(match_sat.day)
+        suffix_sun = get_day_suffix(match_sun.day)
+        sat_date_str = match_sat.strftime(f'%A {match_sat.day}{suffix_sat} %B')
+        sun_date_str = match_sun.strftime(f'%A {match_sun.day}{suffix_sun} %B')
 
         for m_idx, (home, away) in enumerate(round_matches):
-            default_date = match_sat.strftime('%d/%m/%Y') if m_idx < 5 else match_sun.strftime('%d/%m/%Y')
+            default_date = sat_date_str if m_idx < 6 else sun_date_str
             default_time = time_slots[m_idx % len(time_slots)]
             default_status = f"⏰ {default_time}"
 
-            key = f"{norm(home)}_vs_{norm(away)}"
-            if key in live_data:
-                final_date = live_data[key].get("Date") or default_date
-                final_status = live_data[key].get("Status") or default_status
+            # อัปเดตผลบอลสดเฉพาะสัปดาห์ปัจจุบัน (Matchweek 1) ป้องกันผลแข่งหลุดไปสัปดาห์อนาคต
+            if mw_idx == 1:
+                key = f"{norm(home)}_vs_{norm(away)}"
+                if key in live_data:
+                    final_date = live_data[key].get("Date") or default_date
+                    final_status = live_data[key].get("Status") or default_status
+                else:
+                    final_date = default_date
+                    final_status = default_status
             else:
                 final_date = default_date
                 final_status = default_status
