@@ -21,6 +21,7 @@ WEB_SOURCES = [
 
 PLAYLIST_SOURCES = [
     ("📱 TNN Tech Reports (Playlist ข่าว & นวัตกรรมเทคโนโลยี)", "https://www.youtube.com/playlist?list=PLr8CA-SlIPTQlN_u93VGyCeL5YDk5igf7"),
+    ("🔬 เดอะวิทย์ด้อม | ด้อมของคนชอบวิทย์ (BT beartai)", "https://www.youtube.com/playlist?list=PL3f7lV2hDdvB2VZvshDwrhmYgnGFRhK4j"),
     ("🧠 Genwit อัจฉริยะพันธุ์ใหม่ (FULL EP - วิทยาศาสตร์ & ปัญญาประลอง)", "https://www.youtube.com/playlist?list=PLE3LvI8oc_pgz8DLiEL2cwOfJhtLBoBHg"),
     ("🎤 The Wall Song ร้องข้ามกำแพง (2026 | FULL EP)", "https://www.youtube.com/playlist?list=PLcwQy6DvJjsye5XTXOd8PUWO_xYxX3v6d"),
     ("🔥 The Wall Song ร้องข้ามกำแพง (2026 | Highlight)", "https://www.youtube.com/playlist?list=PLcwQy6DvJjsxQMBvw2y9o4zV_xU0K9qgO"),
@@ -35,6 +36,7 @@ PLAYLIST_SOURCES = [
 # รายการช่อง YouTube ครบทุกหมวดหมู่ (IT, อนิเมะ/การ์ตูน/สปอยล์หนัง, ฟุตบอล)
 CHANNEL_SOURCES = [
     # --- หมวด 1: IT, เทคโนโลยี & Coding ---
+    ("📱 beartai แบไต๋ (ข่าวสารไอที, เทคโนโลยี & สาระน่ารู้)", "https://www.youtube.com/@beartai/videos", "https://www.youtube.com/feeds/videos.xml?channel_id=UC5P5NlgQmjinm_M4OCzbOHA", "IT & Tech"),
     ("🇹🇭 TNN Online (ข่าวสารทันโลก, ธุรกิจ & สาระความรู้)", "https://www.youtube.com/@TNN.Online/videos", "https://www.youtube.com/feeds/videos.xml?channel_id=UCqUBA96OsqMgSFvTwLXY9yw", "IT & Tech"),
     ("⚡ Extreme IT (รีวิวไอที, จัดสเปกคอม, Gadget)", "https://www.youtube.com/@ExtremeIT/videos", "https://www.youtube.com/feeds/videos.xml?channel_id=UC1l9NQ__kCp9JoBnuZsaUjA", "IT & Tech"),
     ("👑 9arm (นายอาร์ม - เทคโนโลยี, AI & วงการไอที)", "https://www.youtube.com/@9arm./videos", "https://www.youtube.com/feeds/videos.xml?channel_id=UCoiEtD4v1qMAqHV5MDI5Qpg", "IT & Tech"),
