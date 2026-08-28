@@ -1,5 +1,6 @@
 import sys
 import os
+import importlib.util
 
 # การันตี Path โฟลเดอร์ปัจจุบันสำหรับระบบ Import โมดูลย่อยทั้งหมด
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -25,11 +26,19 @@ from data_loader import (
 )
 from rss_module import render_rss_page
 from tech_hub_module import render_tech_hub_page  # Media & Playlist Module
+
 try:
-    from youtube_search_module import render_youtube_search_page  # YouTube Search & Explorer Module
-except ImportError:
-    import youtube_search_module
-    render_youtube_search_page = youtube_search_module.render_youtube_search_page
+    from youtube_search_module import render_youtube_search_page
+except Exception:
+    yt_mod_path = os.path.join(CURRENT_DIR, "youtube_search_module.py")
+    if os.path.exists(yt_mod_path):
+        spec = importlib.util.spec_from_file_location("youtube_search_module", yt_mod_path)
+        yt_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(yt_mod)
+        render_youtube_search_page = yt_mod.render_youtube_search_page
+    else:
+        def render_youtube_search_page():
+            st.error("❌ ไม่พบไฟล์ youtube_search_module.py")
 
 st.set_page_config(page_title="NewsL Lite Matrix", page_icon="⚡", layout="wide")
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
