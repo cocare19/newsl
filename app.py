@@ -17,6 +17,7 @@ from data_loader import (
 )
 from rss_module import render_rss_page
 from tech_hub_module import render_tech_hub_page  # Media & Playlist Module
+from youtube_search_module import render_youtube_search_page  # YouTube Search & Explorer Module
 
 st.set_page_config(page_title="NewsL Lite Matrix", page_icon="⚡", layout="wide")
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
@@ -72,7 +73,8 @@ with st.sidebar:
             "🏆 2. Premier League Tables",
             "📅 3. Premier League Fixtures",
             "📡 4. Curated RSS Feeds",
-            "📺 5. Media & Video Hub"
+            "📺 5. Media & Video Hub",
+            "🔍 6. YouTube Search Hub"
         ]
     )
 
@@ -812,3 +814,7 @@ elif menu_selection == "📡 4. Curated RSS Feeds":
 # --- 5. MEDIA & VIDEO HUB ---
 elif menu_selection == "📺 5. Media & Video Hub":
     render_tech_hub_page()
+
+# --- 6. YOUTUBE SEARCH HUB ---
+elif menu_selection == "🔍 6. YouTube Search Hub":
+    render_youtube_search_page()
