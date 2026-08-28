@@ -1,3 +1,11 @@
+import sys
+import os
+
+# การันตี Path โฟลเดอร์ปัจจุบันสำหรับระบบ Import โมดูลย่อยทั้งหมด
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -17,7 +25,11 @@ from data_loader import (
 )
 from rss_module import render_rss_page
 from tech_hub_module import render_tech_hub_page  # Media & Playlist Module
-from youtube_search_module import render_youtube_search_page  # YouTube Search & Explorer Module
+try:
+    from youtube_search_module import render_youtube_search_page  # YouTube Search & Explorer Module
+except ImportError:
+    import youtube_search_module
+    render_youtube_search_page = youtube_search_module.render_youtube_search_page
 
 st.set_page_config(page_title="NewsL Lite Matrix", page_icon="⚡", layout="wide")
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
