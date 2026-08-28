@@ -717,7 +717,7 @@ elif menu_selection == "🏆 2. Premier League Tables":
 # --- 3. PREMIER LEAGUE FIXTURES & SCORES ---
 elif menu_selection == "📅 3. Premier League Fixtures":
     st.markdown("#### 📅 Premier League Fixtures & Live Scores")
-    st.caption("ผลการแข่งขันและตารางถ่ายทอดสดพรีเมียร์ลีก (Sky Sports Live Feed แปลงเป็นเวลาไทย BKK)")
+    st.caption("ผลการแข่งขันและตารางถ่ายทอดสดพรีเมียร์ลีก (GoalDaddy Live Feed ตรงตามเวลาไทย BKK)")
 
     t3_c1, t3_c2 = st.columns([3.5, 8.5])
     with t3_c1:
@@ -729,7 +729,7 @@ elif menu_selection == "📅 3. Premier League Fixtures":
     df_all_fixtures = pd.DataFrame(fixtures_raw)
 
     if not df_all_fixtures.empty:
-        ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([3, 3, 1.2])
+        ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([3, 3, 1.4])
         with ctrl_col1:
             all_mws = list(dict.fromkeys(df_all_fixtures['MW'].tolist()))
             mw_options = ["🌟 แสดงทุกสัปดาห์ (All Matchweeks)"] + all_mws
@@ -739,7 +739,7 @@ elif menu_selection == "📅 3. Premier League Fixtures":
         with ctrl_col3:
             st.write("")
             st.write("")
-            st.link_button("🌐 Sky Sports", "https://www.skysports.com/premier-league-scores-fixtures", use_container_width=True)
+            st.link_button("🌐 GoalDaddy", "https://www.goaldaddythai.info/leagueDetail/31/%E0%B8%AD%E0%B8%B1%E0%B8%87%E0%B8%81%E0%B8%A4%E0%B8%A9-%E0%B8%9E%E0%B8%A3%E0%B8%B5%E0%B9%80%E0%B8%A1%E0%B8%B5%E0%B8%A2%E0%B8%A3%E0%B9%8C-%E0%B8%A5%E0%B8%B5%E0%B8%81", use_container_width=True)
 
         st.markdown("---")
         df_filtered = df_all_fixtures.copy()
@@ -802,7 +802,7 @@ elif menu_selection == "📅 3. Premier League Fixtures":
         else:
             st.warning("⚠️ ไม่พบคู่การแข่งขันที่ตรงกับเงื่อนไขการค้นหา")
     else:
-        st.warning("⚠️ กำลังโหลดข้อมูลโปรแกรมการแข่งขันจาก Sky Sports หรือไม่สามารถเชื่อมต่อได้ในขณะนี้")
+        st.warning("⚠️ กำลังโหลดข้อมูลโปรแกรมการแข่งขันจาก GoalDaddy หรือไม่สามารถเชื่อมต่อได้ในขณะนี้")
 
 
 # --- 4. CURATED RSS FEEDS ---

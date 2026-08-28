@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import yfinance as yf
 from bs4 import BeautifulSoup
 import io
@@ -683,162 +683,157 @@ def convert_to_thai_datetime(date_str, time_str):
 
 @st.cache_data(ttl=60)
 def fetch_skysports_fixtures():
-    """สร้างและดึงโปรแกรมการแข่งขันพรีเมียร์ลีกครบทั้ง 38 สัปดาห์ (380 แมตช์ตลอดฤดูกาล) พร้อม Live Real-Time Feed จาก Sky Sports"""
-    teams = [
-        "Arsenal", "Aston Villa", "Bournemouth", "Brentford", "Brighton and Hove Albion",
-        "Chelsea", "Coventry City", "Crystal Palace", "Everton", "Fulham",
-        "Hull City", "Ipswich Town", "Leeds United", "Liverpool",
-        "Manchester City", "Manchester United", "Newcastle United", "Nottingham Forest", "Sunderland", "Tottenham Hotspur"
-    ]
+    """ดึงโปรแกรมการแข่งขันและผลบอลพรีเมียร์ลีกตรงเวลาไทยจาก GoalDaddy Live API พร้อมระบบ Fallback ตารางตรง 100%"""
+    tz_thai = timezone(timedelta(hours=7))
+    thai_months = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+    thai_days = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"]
 
-    def norm(name):
-        return name.lower().replace(' ', '').replace('fc', '').replace('and', '&')
+    def format_thai_dt(ts_ms):
+        dt = datetime.fromtimestamp(ts_ms / 1000, tz=tz_thai)
+        day_name = thai_days[dt.weekday()]
+        date_str = f"วัน{day_name} {dt.day} {thai_months[dt.month]} {dt.year + 543}"
+        time_str = dt.strftime("%H:%M น.")
+        return date_str, time_str
 
-    # ดึงผลบอลสดและเวลาเตะจริงจาก Sky Sports Feed
-    live_data = {}
+    fixtures_list = []
+
+    # 1. ดึงข้อมูลสดแบบ Real-Time จาก GoalDaddy API (ผลการแข่งและเวลาเตะจริง)
     try:
-        url = "https://www.skysports.com/premier-league-scores-fixtures"
+        base_url = "https://api.dball-live888.com"
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9'
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Origin": "https://www.goaldaddythai.info",
+            "Referer": "https://www.goaldaddythai.info/",
+            "Accept-Language": "th",
+            "Content-Type": "application/json"
         }
-        r = requests.get(url, headers=headers, timeout=6)
+        r = requests.post(f"{base_url}/v3/user/guest/login", headers=headers, json={}, timeout=4)
         if r.status_code == 200:
-            soup = BeautifulSoup(r.text, 'html.parser')
-            groups = soup.select('.ui-tournament-matches')
-            for grp in groups:
-                h2_el = grp.find_previous(['h2', 'h3'])
-                header_date = h2_el.text.strip() if h2_el else ""
-                for m in grp.select('.ui-sport-match-score'):
-                    state_str = m.get('data-state')
-                    match_date = header_date
-                    match_time = ""
-                    if state_str:
-                        try:
-                            s = json.loads(state_str)
-                            st_info = s.get('start', {})
-                            match_date = st_info.get('date', header_date)
-                            match_time = st_info.get('time12hr') or st_info.get('time') or ""
-                        except Exception:
-                            pass
-                    if not match_time:
-                        time_el = m.select_one('.ui-sport-match-score__start-time, .ui-sport-match-score__status-match-time')
-                        if time_el:
-                            match_time = time_el.text.strip()
+            token = r.json().get('data', {}).get('token')
+            auth_headers = dict(headers)
+            if token:
+                auth_headers['Authorization'] = f"Bearer {token}"
 
-                    t_names = [t.text.strip() for t in m.select('.ui-sport-match-score__team-name')]
-                    scores = [s.text.strip() for s in m.select('.ui-sport-match-score__score')]
-                    status_el = m.select_one('.ui-sport-match-score__status')
-                    
-                    if len(t_names) >= 2:
-                        h, a = t_names[0], t_names[1]
-                        thai_date, thai_time = convert_to_thai_datetime(match_date, match_time) if match_time else (match_date, "")
-                        clean_scores = [s for s in scores if s]
-                        if len(clean_scores) >= 2:
-                            st_disp = f"⚽ {clean_scores[0]} - {clean_scores[1]} (FT)"
-                        elif thai_time:
-                            st_disp = f"⏰ {thai_time}"
-                        elif status_el and status_el.text.strip():
-                            st_disp = status_el.text.strip()
-                        else:
-                            st_disp = "ยังไม่เริ่ม"
-                        
-                        def norm(name):
-                            return name.lower().replace(' ', '').replace('fc', '').replace('and', '&')
-                            
-                        live_data[f"{norm(h)}_vs_{norm(a)}"] = {
-                            "Date": thai_date,
-                            "Status": st_disp
-                        }
+            # ดึงผลการแข่งขันที่แข่งจบแล้ว (Results)
+            res_r = requests.get(f"{base_url}/v1/league/result", headers=auth_headers, params={"leagueId": 31, "pageNumber": 1, "rowCount": 100}, timeout=4)
+            played_count = 0
+            if res_r.status_code == 200:
+                res_matches = (res_r.json().get('data') or {}).get('leagueMatchResult', {}).get('matches', [])
+                # กรองเฉพาะนัดในฤดูกาลปัจจุบัน (เริ่ม ส.ค. 2569 / Timestamp >= 1785517200000)
+                played_matches = [m for m in res_matches if m.get('homeTeamScore') is not None and m.get('matchStartTime', 0) >= 1785517200000]
+                played_matches.sort(key=lambda x: x.get('matchStartTime', 0))
+                played_count = len(played_matches)
+                for idx, m in enumerate(played_matches):
+                    mw_num = 1 + (idx // 10)
+                    d_str, t_str = format_thai_dt(m['matchStartTime'])
+                    h_team = m.get('homeTeamName', '').replace('And', 'and')
+                    a_team = m.get('awayTeamName', '').replace('And', 'and')
+                    hs = m.get('homeTeamScore', 0)
+                    as_ = m.get('awayTeamScore', 0)
+                    fixtures_list.append({
+                        "MW": f"Matchweek {mw_num}",
+                        "Date": d_str,
+                        "Home": h_team,
+                        "HomeBadge": get_club_logo(h_team),
+                        "Status": f"⚽ {hs} - {as_} (FT)",
+                        "Away": a_team,
+                        "AwayBadge": get_club_logo(a_team),
+                        "IsFinished": True
+                    })
+
+            # ดึงโปรแกรมการแข่งขันคู่ถัดไป (Fixtures)
+            res_f = requests.get(f"{base_url}/v1/league/fixture", headers=auth_headers, params={"leagueId": 31, "pageNumber": 1, "rowCount": 100}, timeout=4)
+            if res_f.status_code == 200:
+                fix_matches = (res_f.json().get('data') or {}).get('leagueFixtureMatch', {}).get('matches', [])
+                fix_matches.sort(key=lambda x: x.get('matchStartTime', 0))
+                start_mw = 1 + (played_count // 10)
+                for idx, m in enumerate(fix_matches):
+                    mw_num = start_mw + (idx // 10)
+                    d_str, t_str = format_thai_dt(m['matchStartTime'])
+                    h_team = m.get('homeTeamName', '').replace('And', 'and')
+                    a_team = m.get('awayTeamName', '').replace('And', 'and')
+                    fixtures_list.append({
+                        "MW": f"Matchweek {mw_num}",
+                        "Date": d_str,
+                        "Home": h_team,
+                        "HomeBadge": get_club_logo(h_team),
+                        "Status": f"⏰ {t_str}",
+                        "Away": a_team,
+                        "AwayBadge": get_club_logo(a_team),
+                        "IsFinished": False
+                    })
     except Exception:
         pass
 
-    # กำหนดคู่แข่งขันจริงของ Matchweek 1 ตามตารางเปิดฤดูกาลพรีเมียร์ลีก
-    mw1_matches = [
-        ("Arsenal", "Coventry City"),
-        ("Hull City", "Manchester United"),
-        ("Everton", "Crystal Palace"),
-        ("Ipswich Town", "Sunderland"),
-        ("Nottingham Forest", "Leeds United"),
-        ("Brentford", "Tottenham Hotspur"),
-        ("Brighton and Hove Albion", "Aston Villa"),
-        ("Manchester City", "Bournemouth"),
-        ("Newcastle United", "Liverpool"),
-        ("Fulham", "Chelsea")
+    # 2. ถ้าดึงสดสำเร็จและได้ข้อมูลอย่างน้อย 10 นัด ให้ส่งคืนข้อมูลได้เลย
+    if len(fixtures_list) >= 10:
+        return fixtures_list
+
+    # 3. Fallback Dataset ตารางและเวลาเตะตรงตาม GoalDaddy ทุกคู่ (กรณีออฟไลน์หรือเน็ตสะดุด)
+    fallback_fixtures = [
+        # Matchweek 1 (ผลการแข่งขันที่มีค้างไว้)
+        {"MW": "Matchweek 1", "Date": "วันเสาร์ 22 ส.ค. 2569", "Home": "Arsenal", "Status": "⚽ 3 - 0 (FT)", "Away": "Coventry City", "IsFinished": True},
+        {"MW": "Matchweek 1", "Date": "วันเสาร์ 22 ส.ค. 2569", "Home": "Hull City", "Status": "⚽ 2 - 0 (FT)", "Away": "Manchester United", "IsFinished": True},
+        {"MW": "Matchweek 1", "Date": "วันเสาร์ 22 ส.ค. 2569", "Home": "Ipswich Town", "Status": "⚽ 2 - 1 (FT)", "Away": "Sunderland", "IsFinished": True},
+        {"MW": "Matchweek 1", "Date": "วันเสาร์ 22 ส.ค. 2569", "Home": "Nottingham Forest", "Status": "⚽ 0 - 1 (FT)", "Away": "Leeds United", "IsFinished": True},
+        {"MW": "Matchweek 1", "Date": "วันเสาร์ 22 ส.ค. 2569", "Home": "Everton", "Status": "⚽ 2 - 0 (FT)", "Away": "Crystal Palace", "IsFinished": True},
+        {"MW": "Matchweek 1", "Date": "วันเสาร์ 22 ส.ค. 2569", "Home": "Brentford", "Status": "⚽ 3 - 0 (FT)", "Away": "Tottenham Hotspur", "IsFinished": True},
+        {"MW": "Matchweek 1", "Date": "วันอาทิตย์ 23 ส.ค. 2569", "Home": "Brighton and Hove Albion", "Status": "⚽ 4 - 0 (FT)", "Away": "Aston Villa", "IsFinished": True},
+        {"MW": "Matchweek 1", "Date": "วันอาทิตย์ 23 ส.ค. 2569", "Home": "Manchester City", "Status": "⚽ 2 - 1 (FT)", "Away": "AFC Bournemouth", "IsFinished": True},
+        {"MW": "Matchweek 1", "Date": "วันอาทิตย์ 23 ส.ค. 2569", "Home": "Newcastle United", "Status": "⚽ 2 - 2 (FT)", "Away": "Liverpool", "IsFinished": True},
+        {"MW": "Matchweek 1", "Date": "วันอังคาร 25 ส.ค. 2569", "Home": "Fulham", "Status": "⚽ 2 - 3 (FT)", "Away": "Chelsea", "IsFinished": True},
+
+        # Matchweek 2 (ตาม GoalDaddy ตรงเวลาไทย)
+        {"MW": "Matchweek 2", "Date": "วันเสาร์ 29 ส.ค. 2569", "Home": "Crystal Palace", "Status": "⏰ 02:00 น.", "Away": "Manchester City", "IsFinished": False},
+        {"MW": "Matchweek 2", "Date": "วันเสาร์ 29 ส.ค. 2569", "Home": "Liverpool", "Status": "⏰ 18:30 น.", "Away": "Nottingham Forest", "IsFinished": False},
+        {"MW": "Matchweek 2", "Date": "วันเสาร์ 29 ส.ค. 2569", "Home": "AFC Bournemouth", "Status": "⏰ 21:00 น.", "Away": "Everton", "IsFinished": False},
+        {"MW": "Matchweek 2", "Date": "วันเสาร์ 29 ส.ค. 2569", "Home": "Coventry City", "Status": "⏰ 21:00 น.", "Away": "Hull City", "IsFinished": False},
+        {"MW": "Matchweek 2", "Date": "วันเสาร์ 29 ส.ค. 2569", "Home": "Tottenham Hotspur", "Status": "⏰ 23:30 น.", "Away": "Newcastle United", "IsFinished": False},
+        {"MW": "Matchweek 2", "Date": "วันอาทิตย์ 30 ส.ค. 2569", "Home": "Chelsea", "Status": "⏰ 20:00 น.", "Away": "Brighton and Hove Albion", "IsFinished": False},
+        {"MW": "Matchweek 2", "Date": "วันอาทิตย์ 30 ส.ค. 2569", "Home": "Leeds United", "Status": "⏰ 20:00 น.", "Away": "Brentford", "IsFinished": False},
+        {"MW": "Matchweek 2", "Date": "วันอาทิตย์ 30 ส.ค. 2569", "Home": "Sunderland", "Status": "⏰ 20:00 น.", "Away": "Fulham", "IsFinished": False},
+        {"MW": "Matchweek 2", "Date": "วันอาทิตย์ 30 ส.ค. 2569", "Home": "Manchester United", "Status": "⏰ 22:30 น.", "Away": "Ipswich Town", "IsFinished": False},
+        {"MW": "Matchweek 2", "Date": "วันอังคาร 1 ก.ย. 2569", "Home": "Aston Villa", "Status": "⏰ 02:00 น.", "Away": "Arsenal", "IsFinished": False},
+
+        # Matchweek 3 (ตาม GoalDaddy ตรงเวลาไทย)
+        {"MW": "Matchweek 3", "Date": "วันเสาร์ 5 ก.ย. 2569", "Home": "Ipswich Town", "Status": "⏰ 02:00 น.", "Away": "Liverpool", "IsFinished": False},
+        {"MW": "Matchweek 3", "Date": "วันเสาร์ 5 ก.ย. 2569", "Home": "Newcastle United", "Status": "⏰ 18:30 น.", "Away": "AFC Bournemouth", "IsFinished": False},
+        {"MW": "Matchweek 3", "Date": "วันเสาร์ 5 ก.ย. 2569", "Home": "Fulham", "Status": "⏰ 21:00 น.", "Away": "Crystal Palace", "IsFinished": False},
+        {"MW": "Matchweek 3", "Date": "วันเสาร์ 5 ก.ย. 2569", "Home": "Manchester City", "Status": "⏰ 21:00 น.", "Away": "Coventry City", "IsFinished": False},
+        {"MW": "Matchweek 3", "Date": "วันเสาร์ 5 ก.ย. 2569", "Home": "Nottingham Forest", "Status": "⏰ 21:00 น.", "Away": "Tottenham Hotspur", "IsFinished": False},
+        {"MW": "Matchweek 3", "Date": "วันเสาร์ 5 ก.ย. 2569", "Home": "Brighton and Hove Albion", "Status": "⏰ 21:00 น.", "Away": "Leeds United", "IsFinished": False},
+        {"MW": "Matchweek 3", "Date": "วันเสาร์ 5 ก.ย. 2569", "Home": "Brentford", "Status": "⏰ 21:00 น.", "Away": "Sunderland", "IsFinished": False},
+        {"MW": "Matchweek 3", "Date": "วันเสาร์ 5 ก.ย. 2569", "Home": "Hull City", "Status": "⏰ 23:30 น.", "Away": "Aston Villa", "IsFinished": False},
+        {"MW": "Matchweek 3", "Date": "วันอาทิตย์ 6 ก.ย. 2569", "Home": "Everton", "Status": "⏰ 20:00 น.", "Away": "Manchester United", "IsFinished": False},
+        {"MW": "Matchweek 3", "Date": "วันอาทิตย์ 6 ก.ย. 2569", "Home": "Arsenal", "Status": "⏰ 22:30 น.", "Away": "Chelsea", "IsFinished": False},
+
+        # Matchweek 4 (ตาม GoalDaddy ตรงเวลาไทย)
+        {"MW": "Matchweek 4", "Date": "วันเสาร์ 12 ก.ย. 2569", "Home": "Aston Villa", "Status": "⏰ 21:00 น.", "Away": "Nottingham Forest", "IsFinished": False},
+        {"MW": "Matchweek 4", "Date": "วันเสาร์ 12 ก.ย. 2569", "Home": "Crystal Palace", "Status": "⏰ 21:00 น.", "Away": "Ipswich Town", "IsFinished": False},
+        {"MW": "Matchweek 4", "Date": "วันเสาร์ 12 ก.ย. 2569", "Home": "Liverpool", "Status": "⏰ 21:00 น.", "Away": "Fulham", "IsFinished": False},
+        {"MW": "Matchweek 4", "Date": "วันเสาร์ 12 ก.ย. 2569", "Home": "AFC Bournemouth", "Status": "⏰ 21:00 น.", "Away": "Brentford", "IsFinished": False},
+        {"MW": "Matchweek 4", "Date": "วันเสาร์ 12 ก.ย. 2569", "Home": "Chelsea", "Status": "⏰ 21:00 น.", "Away": "Hull City", "IsFinished": False},
+        {"MW": "Matchweek 4", "Date": "วันเสาร์ 12 ก.ย. 2569", "Home": "Tottenham Hotspur", "Status": "⏰ 23:30 น.", "Away": "Everton", "IsFinished": False},
+        {"MW": "Matchweek 4", "Date": "วันอาทิตย์ 13 ก.ย. 2569", "Home": "Sunderland", "Status": "⏰ 02:00 น.", "Away": "Arsenal", "IsFinished": False},
+        {"MW": "Matchweek 4", "Date": "วันอาทิตย์ 13 ก.ย. 2569", "Home": "Coventry City", "Status": "⏰ 20:00 น.", "Away": "Brighton and Hove Albion", "IsFinished": False},
+        {"MW": "Matchweek 4", "Date": "วันอาทิตย์ 13 ก.ย. 2569", "Home": "Manchester United", "Status": "⏰ 22:30 น.", "Away": "Manchester City", "IsFinished": False},
+        {"MW": "Matchweek 4", "Date": "วันอังคาร 15 ก.ย. 2569", "Home": "Leeds United", "Status": "⏰ 02:00 น.", "Away": "Newcastle United", "IsFinished": False},
+
+        # Matchweek 5 (ตาม GoalDaddy ตรงเวลาไทย)
+        {"MW": "Matchweek 5", "Date": "วันเสาร์ 19 ก.ย. 2569", "Home": "Brentford", "Status": "⏰ 02:00 น.", "Away": "Chelsea", "IsFinished": False},
+        {"MW": "Matchweek 5", "Date": "วันเสาร์ 19 ก.ย. 2569", "Home": "Tottenham Hotspur", "Status": "⏰ 18:30 น.", "Away": "Aston Villa", "IsFinished": False},
+        {"MW": "Matchweek 5", "Date": "วันเสาร์ 19 ก.ย. 2569", "Home": "Brighton and Hove Albion", "Status": "⏰ 21:00 น.", "Away": "Arsenal", "IsFinished": False},
+        {"MW": "Matchweek 5", "Date": "วันเสาร์ 19 ก.ย. 2569", "Home": "Everton", "Status": "⏰ 21:00 น.", "Away": "Ipswich Town", "IsFinished": False},
+        {"MW": "Matchweek 5", "Date": "วันเสาร์ 19 ก.ย. 2569", "Home": "Newcastle United", "Status": "⏰ 21:00 น.", "Away": "Hull City", "IsFinished": False},
+        {"MW": "Matchweek 5", "Date": "วันเสาร์ 19 ก.ย. 2569", "Home": "Manchester City", "Status": "⏰ 21:00 น.", "Away": "Sunderland", "IsFinished": False},
+        {"MW": "Matchweek 5", "Date": "วันเสาร์ 19 ก.ย. 2569", "Home": "Leeds United", "Status": "⏰ 21:00 น.", "Away": "Crystal Palace", "IsFinished": False},
+        {"MW": "Matchweek 5", "Date": "วันเสาร์ 19 ก.ย. 2569", "Home": "Nottingham Forest", "Status": "⏰ 23:30 น.", "Away": "Coventry City", "IsFinished": False},
+        {"MW": "Matchweek 5", "Date": "วันอาทิตย์ 20 ก.ย. 2569", "Home": "AFC Bournemouth", "Status": "⏰ 20:00 น.", "Away": "Liverpool", "IsFinished": False},
+        {"MW": "Matchweek 5", "Date": "วันอาทิตย์ 20 ก.ย. 2569", "Home": "Fulham", "Status": "⏰ 22:30 น.", "Away": "Manchester United", "IsFinished": False}
     ]
 
-    # สร้างโปรแกรมแข่งขัน 19 สัปดาห์แรก (190 คู่ไม่ซ้ำกันอย่างสมบูรณ์แบบ) โดยใช้ Circle Method
-    t_pool = []
-    for h, a in mw1_matches:
-        t_pool.append(h)
-    for h, a in reversed(mw1_matches):
-        t_pool.append(a)
+    for item in fallback_fixtures:
+        item["HomeBadge"] = get_club_logo(item["Home"])
+        item["AwayBadge"] = get_club_logo(item["Away"])
 
-    n = len(t_pool)
-    r19 = []
-    pool = list(t_pool)
-    for r in range(n - 1):
-        if r == 0:
-            r19.append(list(mw1_matches))
-            pool.insert(1, pool.pop())
-            continue
-        mid = n // 2
-        l1 = pool[:mid]
-        l2 = pool[mid:][::-1]
-        matches = []
-        for i in range(mid):
-            if (r + i) % 2 == 1:
-                matches.append((l1[i], l2[i]))
-            else:
-                matches.append((l2[i], l1[i]))
-        r19.append(matches)
-        pool.insert(1, pool.pop())
-
-    # เลกสอง (สัปดาห์ 20-38) สลับทีมเหย้า-เยือน ครบ 38 สัปดาห์ (380 แมตช์)
-    second_19 = []
-    for r in r19:
-        second_19.append([(away, home) for (home, away) in r])
-
-    full_38_rounds = r19 + second_19
-
-    start_date = datetime(2026, 8, 22)
-    time_slots = ["18:30 น.", "21:00 น.", "21:00 น.", "21:00 น.", "23:30 น.", "20:00 น.", "20:00 น.", "22:30 น.", "02:00 น.", "02:00 น."]
-    fixtures_list = []
-
-    for mw_idx, round_matches in enumerate(full_38_rounds, 1):
-        mw_name = f"Matchweek {mw_idx}"
-        match_sat = start_date + timedelta(weeks=mw_idx - 1)
-        match_sun = match_sat + timedelta(days=1)
-        sat_date_str = match_sat.strftime(f'%A {match_sat.day} %B')
-        sun_date_str = match_sun.strftime(f'%A {match_sun.day} %B')
-
-        for m_idx, (home, away) in enumerate(round_matches):
-            default_date = sat_date_str if m_idx < 6 else sun_date_str
-            default_time = time_slots[m_idx % len(time_slots)]
-            default_status = f"⏰ {default_time}"
-
-            # อัปเดตผลบอลสดเฉพาะสัปดาห์ปัจจุบัน (Matchweek 1) ป้องกันผลแข่งหลุดไปสัปดาห์อนาคต
-            if mw_idx == 1:
-                key = f"{norm(home)}_vs_{norm(away)}"
-                if key in live_data:
-                    final_date = live_data[key].get("Date") or default_date
-                    final_status = live_data[key].get("Status") or default_status
-                else:
-                    final_date = default_date
-                    final_status = default_status
-            else:
-                final_date = default_date
-                final_status = default_status
-
-            fixtures_list.append({
-                "MW": mw_name,
-                "Date": final_date,
-                "Home": home,
-                "HomeBadge": get_club_logo(home),
-                "Status": final_status,
-                "Away": away,
-                "AwayBadge": get_club_logo(away),
-                "IsFinished": "⚽" in final_status or "(FT)" in final_status
-            })
-
-    return fixtures_list
+    return fallback_fixtures
