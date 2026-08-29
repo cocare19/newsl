@@ -37,7 +37,8 @@ fetch_real_historical_oil_table = data_loader_mod.fetch_real_historical_oil_tabl
 fetch_today_oil_all_brands = data_loader_mod.fetch_today_oil_all_brands
 fetch_macro_indicators = data_loader_mod.fetch_macro_indicators
 fetch_tech_ai_stocks = data_loader_mod.fetch_tech_ai_stocks
-fetch_skysports_standings = data_loader_mod.fetch_skysports_standings
+fetch_goal_standings = getattr(data_loader_mod, 'fetch_goal_standings', data_loader_mod.fetch_skysports_standings)
+fetch_skysports_standings = fetch_goal_standings
 fetch_goal_fixtures = getattr(data_loader_mod, 'fetch_goal_fixtures', data_loader_mod.fetch_skysports_fixtures)
 fetch_skysports_fixtures = fetch_goal_fixtures
 
@@ -669,75 +670,109 @@ if menu_selection == "📈 1. Real-Time Market & Pricing":
 # --- 2. PREMIER LEAGUE TABLES ---
 elif menu_selection == "🏆 2. Premier League Tables":
     try:
-        st.markdown("#### 🏆 Premier League Standings")
-        st.caption("ตารางคะแนนสดครบ 20 สโมสร (Real-Time Live Feed)")
-        
-        t2_c1, t2_c2 = st.columns([3.5, 8.5])
-        with t2_c1:
-            if st.button("🔄 รีเฟรชตารางคะแนนสด", key="btn_sky_refresh", use_container_width=True):
-                st.cache_data.clear()
-                st.rerun()
+        st.markdown("#### 🏆 Premier League Standings & Live Form")
+        st.caption("ตารางคะแนนสดพรีเมียร์ลีก อัปเดตอันดับ แต้ม ผลต่างประตู ฟอร์ม 5 นัดหลังสุด และ Live Score ขณะแข่งขัน (Goal.com Live Feed)")
 
-        st.markdown("---")
-        df_sky = fetch_skysports_standings()
-        if not df_sky.empty:
+        df_standings = fetch_goal_standings()
+
+        if not df_standings.empty:
+            # Check for live matches in standings
+            live_active_clubs = len(df_standings[df_standings['Live'].astype(str).str.strip() != '']) if 'Live' in df_standings.columns else 0
+
+            t2_c1, t2_c2 = st.columns([4.2, 7.8])
+            with t2_c1:
+                refresh_label = f"🔄 รีเฟรชตารางคะแนนสด {'(🔴 กำลังเตะ ' + str(live_active_clubs) + ' ทีม)' if live_active_clubs > 0 else ''}"
+                if st.button(refresh_label, key="btn_sky_refresh", use_container_width=True):
+                    st.cache_data.clear()
+                    st.rerun()
+            with t2_c2:
+                st.link_button("🌐 Goal.com Standings", "https://www.goal.com/th/premier-league/%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%87/2kwbbcootiqqgmrzs6o5inle5", use_container_width=False)
+
+            st.markdown("---")
             rows_html = []
-            for _, row in df_sky.iterrows():
+            for _, row in df_standings.iterrows():
                 pos = int(row['Pos'])
                 if pos <= 4:
-                    pos_badge = f"<span style='background:#2563EB;color:#FFF;border-radius:4px;font-weight:700;padding:2px 5px;font-size:0.75rem;'>{pos}</span>"
+                    pos_badge = f"<span style='background:#2563EB;color:#FFF;border-radius:4px;font-weight:700;padding:2px 6px;font-size:0.75rem;'>{pos}</span>"
                 elif pos == 5:
-                    pos_badge = f"<span style='background:#EA580C;color:#FFF;border-radius:4px;font-weight:700;padding:2px 5px;font-size:0.75rem;'>{pos}</span>"
+                    pos_badge = f"<span style='background:#EA580C;color:#FFF;border-radius:4px;font-weight:700;padding:2px 6px;font-size:0.75rem;'>{pos}</span>"
                 elif pos >= 18:
-                    pos_badge = f"<span style='background:#DC2626;color:#FFF;border-radius:4px;font-weight:700;padding:2px 5px;font-size:0.75rem;'>{pos}</span>"
+                    pos_badge = f"<span style='background:#DC2626;color:#FFF;border-radius:4px;font-weight:700;padding:2px 6px;font-size:0.75rem;'>{pos}</span>"
                 else:
-                    pos_badge = f"<span style='font-weight:600;color:#64748B;'>{pos}</span>"
+                    pos_badge = f"<span style='font-weight:600;color:#64748B;padding:2px 6px;'>{pos}</span>"
 
                 badge_url = row.get('Badge', '')
-                badge_tag = f"<img src='{badge_url}' style='width:18px;height:18px;vertical-align:middle;margin-right:5px;object-fit:contain;' onerror=\"this.style.display='none'\">" if badge_url else ""
-                
+                badge_tag = f"<img src='{badge_url}' style='width:20px;height:20px;vertical-align:middle;margin-right:6px;object-fit:contain;' onerror=\"this.style.display='none'\">" if badge_url else ""
+
                 club_name = row['Club']
+                live_val = str(row.get('Live', '')).strip()
+                if live_val:
+                    live_tag = f"<span class='pl-live-score-pill'>🔴 {live_val}</span>"
+                else:
+                    live_tag = "<span style='color:#94A3B8;font-size:0.8rem;'>-</span>"
+
                 gd_val = str(row['GD'])
                 gd_color = "#16A34A" if gd_val.startswith('+') and gd_val != '+0' else ("#DC2626" if gd_val.startswith('-') else "#64748B")
 
+                # Form badges
+                form_raw = str(row.get('Form', '')).strip().upper()
+                form_html_list = []
+                for ch in form_raw:
+                    if ch == 'W':
+                        form_html_list.append("<span class='pl-form-badge pl-form-w'>W</span>")
+                    elif ch == 'D':
+                        form_html_list.append("<span class='pl-form-badge pl-form-d'>D</span>")
+                    elif ch == 'L':
+                        form_html_list.append("<span class='pl-form-badge pl-form-l'>L</span>")
+                form_display = "".join(form_html_list) if form_html_list else "<span style='color:#94A3B8;font-size:0.8rem;'>-</span>"
+
                 row_html = (
                     f"<tr>"
-                    f"<td style='padding:6px 2px;'>{pos_badge}</td>"
-                    f"<td style='padding:6px 6px;text-align:left;font-weight:600;white-space:nowrap;'>{badge_tag}{club_name}</td>"
-                    f"<td style='padding:6px 2px;'>{row['Pl']}</td>"
-                    f"<td style='padding:6px 2px;'>{row['W']}</td>"
-                    f"<td style='padding:6px 2px;'>{row['D']}</td>"
-                    f"<td style='padding:6px 2px;'>{row['L']}</td>"
-                    f"<td style='padding:6px 2px;'>{row.get('F', '-')}</td>"
-                    f"<td style='padding:6px 2px;'>{row.get('A', '-')}</td>"
-                    f"<td style='padding:6px 2px;font-weight:700;color:{gd_color};'>{gd_val}</td>"
-                    f"<td class='pl-pts-col' style='padding:6px 4px;'>{row['Pts']}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{pos_badge}</td>"
+                    f"<td style='padding:7px 8px;text-align:left;font-weight:600;white-space:nowrap;'>{badge_tag}{club_name}</td>"
+                    f"<td style='padding:7px 4px;text-align:center;'>{live_tag}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row['Pl']}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row['W']}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row['D']}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row['L']}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row.get('F', '-')}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row.get('A', '-')}</td>"
+                    f"<td style='padding:7px 4px;text-align:center;font-weight:700;color:{gd_color};'>{gd_val}</td>"
+                    f"<td class='pl-pts-col' style='padding:7px 6px;text-align:center;font-weight:800;font-size:0.92rem;'>{row['Pts']}</td>"
+                    f"<td style='padding:7px 6px;text-align:center;white-space:nowrap;'>{form_display}</td>"
                     f"</tr>"
                 )
                 rows_html.append(row_html)
 
             table_body = "".join(rows_html)
             final_html = (
-                "<div class='pl-table-container'>"
-                "<table class='pl-table'>"
+                "<div class='pl-table-container' style='overflow-x:auto;'>"
+                "<table class='pl-table' style='width:100%;border-collapse:collapse;'>"
                 "<thead><tr>"
-                "<th style='width:30px;'>#</th>"
+                "<th style='width:32px;text-align:center;'>#</th>"
                 "<th style='text-align:left;padding-left:8px;'>สโมสร (Club)</th>"
-                "<th style='width:32px;'>แข่ง</th>"
-                "<th style='width:32px;'>ชนะ</th>"
-                "<th style='width:32px;'>เสมอ</th>"
-                "<th style='width:32px;'>แพ้</th>"
-                "<th style='width:34px;'>ได้</th>"
-                "<th style='width:34px;'>เสีย</th>"
-                "<th style='width:36px;'>+/-</th>"
-                "<th class='pl-pts-col' style='width:42px;'>แต้ม</th>"
+                "<th style='width:65px;text-align:center;'>สด (Live)</th>"
+                "<th style='width:34px;text-align:center;'>แข่ง</th>"
+                "<th style='width:34px;text-align:center;'>ชนะ</th>"
+                "<th style='width:34px;text-align:center;'>เสมอ</th>"
+                "<th style='width:34px;text-align:center;'>แพ้</th>"
+                "<th style='width:36px;text-align:center;'>ได้</th>"
+                "<th style='width:36px;text-align:center;'>เสีย</th>"
+                "<th style='width:38px;text-align:center;'>+/-</th>"
+                "<th class='pl-pts-col' style='width:45px;text-align:center;'>แต้ม</th>"
+                "<th style='width:115px;text-align:center;'>ฟอร์มล่าสุด</th>"
                 "</tr></thead>"
                 f"<tbody>{table_body}</tbody>"
                 "</table></div>"
-                "<div style='display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;font-size:0.74rem;color:#64748B;padding-left:2px;'>"
+                "<div style='display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:0.75rem;color:#64748B;padding-left:2px;align-items:center;'>"
                 "<span><span style='display:inline-block;width:10px;height:10px;background:#2563EB;border-radius:2px;margin-right:4px;'></span>1-4: UCL</span>"
                 "<span><span style='display:inline-block;width:10px;height:10px;background:#EA580C;border-radius:2px;margin-right:4px;'></span>5: UEL</span>"
                 "<span><span style='display:inline-block;width:10px;height:10px;background:#DC2626;border-radius:2px;margin-right:4px;'></span>18-20: ตกชั้น</span>"
+                "<span style='color:#CBD5E1;'>|</span>"
+                "<span><span class='pl-form-badge pl-form-w' style='width:14px;height:14px;font-size:0.6rem;margin-right:3px;'>W</span> ชนะ</span>"
+                "<span><span class='pl-form-badge pl-form-d' style='width:14px;height:14px;font-size:0.6rem;margin-right:3px;'>D</span> เสมอ</span>"
+                "<span><span class='pl-form-badge pl-form-l' style='width:14px;height:14px;font-size:0.6rem;margin-right:3px;'>L</span> แพ้</span>"
+                "<span><span class='pl-live-score-pill' style='font-size:0.68rem;padding:1px 5px;margin-right:3px;'>🔴 สด</span> แข่งขันอยู่</span>"
                 "</div>"
             )
             st.html(final_html)

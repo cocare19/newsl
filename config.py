@@ -326,6 +326,34 @@ CUSTOM_CSS = """
         display: inline-block;
         white-space: nowrap;
     }
+    .pl-live-score-pill {
+        background: #DC2626;
+        color: #FFFFFF;
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-weight: 700;
+        font-size: 0.76rem;
+        display: inline-block;
+        white-space: nowrap;
+        animation: plLivePulse 1.8s infinite ease-in-out;
+        box-shadow: 0 0 6px rgba(220, 38, 38, 0.4);
+    }
+    .pl-form-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 19px;
+        height: 19px;
+        border-radius: 4px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: #FFFFFF;
+        margin: 0 1.5px;
+        line-height: 1;
+    }
+    .pl-form-w { background-color: #16A34A; }
+    .pl-form-d { background-color: #64748B; }
+    .pl-form-l { background-color: #DC2626; }
 
     /* --- Dark Mode Auto Support (Mobile & Desktop) --- */
     @media (prefers-color-scheme: dark) {
@@ -356,6 +384,7 @@ CUSTOM_CSS = """
         .pl-fixture-date { color: #94A3B8 !important; }
         .pl-fixture-team { color: #F1F5F9 !important; }
         .pl-badge-live { background: #EF4444 !important; color: #FFFFFF !important; }
+        .pl-live-score-pill { background: #EF4444 !important; color: #FFFFFF !important; }
         .pl-badge-upcoming { background: #1E293B !important; color: #F1F5F9 !important; border-color: #374151 !important; }
     }
 </style>

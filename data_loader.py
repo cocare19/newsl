@@ -568,14 +568,77 @@ def fetch_tech_ai_stocks():
     return results
 
 # ==============================================================================
-# 4. ระบบดึงตารางคะแนนพรีเมียร์ลีก Real-Time Live Standings (20 สโมสร)
+# 4. ระบบดึงตารางคะแนนพรีเมียร์ลีก Real-Time Live Standings & Form (Goal.com)
 # ==============================================================================
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_skysports_standings():
-    """ดึงตารางคะแนนพรีเมียร์ลีกสดเรียลไทม์ จาก ESPN & Sky Sports"""
+def fetch_goal_standings():
+    """ดึงตารางคะแนนพรีเมียร์ลีกสดเรียลไทม์ พร้อม Live Score และฟอร์มล่าสุด 5 นัด จาก Goal.com"""
+    url_goal = "https://www.goal.com/th/premier-league/%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%87/2kwbbcootiqqgmrzs6o5inle5"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'th-TH,th;q=0.9,en;q=0.8',
+        'Referer': 'https://www.goal.com/th'
+    }
+
+    try:
+        r = requests.get(url_goal, headers=headers, timeout=(3, 8))
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, 'html.parser')
+            table = soup.find('table')
+            if table:
+                rows = table.find_all('tr')
+                data = []
+                for r_item in rows[1:]:
+                    cells = r_item.find_all('td')
+                    if len(cells) >= 11:
+                        pos_str = cells[0].get_text(strip=True)
+                        club_cell = cells[1]
+                        img = club_cell.find('img')
+                        badge_url = img.get('src') if img else ''
+                        club_name = club_cell.get_text(strip=True)
+                        if not badge_url:
+                            badge_url = get_club_logo(club_name)
+
+                        live_score = cells[2].get_text(strip=True)
+                        p_str = cells[3].get_text(strip=True)
+                        w_str = cells[4].get_text(strip=True)
+                        d_str = cells[5].get_text(strip=True)
+                        l_str = cells[6].get_text(strip=True)
+                        f_str = cells[7].get_text(strip=True)
+                        a_str = cells[8].get_text(strip=True)
+                        gd_str = cells[9].get_text(strip=True)
+                        pts_str = cells[10].get_text(strip=True)
+                        form_str = cells[11].get_text(strip=True) if len(cells) > 11 else ''
+
+                        if gd_str and not gd_str.startswith('+') and not gd_str.startswith('-') and gd_str != '0':
+                            gd_str = f"+{gd_str}"
+
+                        data.append({
+                            'Pos': int(pos_str) if pos_str.isdigit() else pos_str,
+                            'Badge': badge_url,
+                            'Club': club_name,
+                            'Live': live_score,
+                            'Pl': int(p_str) if p_str.isdigit() else p_str,
+                            'W': int(w_str) if w_str.isdigit() else w_str,
+                            'D': int(d_str) if d_str.isdigit() else d_str,
+                            'L': int(l_str) if l_str.isdigit() else l_str,
+                            'F': int(f_str) if f_str.isdigit() else f_str,
+                            'A': int(a_str) if a_str.isdigit() else a_str,
+                            'GD': gd_str,
+                            'Pts': int(pts_str) if pts_str.isdigit() else pts_str,
+                            'Form': form_str
+                        })
+
+                if len(data) >= 18:
+                    df_goal = pd.DataFrame(data)
+                    return df_goal
+    except Exception:
+        pass
+
+    # Fallback 1: ESPN
     try:
         url_espn = "https://www.espn.com/soccer/standings/_/league/eng.1"
-        tables = pd.read_html(url_espn, storage_options={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+        tables = pd.read_html(url_espn, storage_options={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
         if len(tables) >= 2:
             df_names = tables[0]
             df_stats = tables[1]
@@ -591,28 +654,28 @@ def fetch_skysports_standings():
             df_espn = pd.DataFrame({
                 'Pos': list(range(1, len(clean_names) + 1)),
                 'Club': clean_names,
+                'Live': '',
                 'Pl': pd.to_numeric(df_stats['GP'], errors='coerce').fillna(0).astype(int),
                 'W': pd.to_numeric(df_stats['W'], errors='coerce').fillna(0).astype(int),
                 'D': pd.to_numeric(df_stats['D'], errors='coerce').fillna(0).astype(int),
                 'L': pd.to_numeric(df_stats['L'], errors='coerce').fillna(0).astype(int),
                 'F': df_stats['F'],
                 'A': df_stats['A'],
-                'GD': df_stats['GD'].apply(lambda x: f"+{x}" if str(x).isdigit() and int(x) > 0 else (f"+{x}" if str(x).replace('-','').isdigit() and int(x) > 0 else str(x))),
-                'Pts': pd.to_numeric(df_stats['P'], errors='coerce').fillna(0).astype(int)
+                'GD': df_stats['GD'].apply(lambda x: f"+{x}" if str(x).isdigit() and int(x) > 0 else str(x)),
+                'Pts': pd.to_numeric(df_stats['P'], errors='coerce').fillna(0).astype(int),
+                'Form': ''
             })
             df_espn['Badge'] = df_espn['Club'].apply(get_club_logo)
             if not df_espn.empty and len(df_espn) >= 18:
-                return df_espn[['Pos', 'Badge', 'Club', 'Pl', 'W', 'D', 'L', 'F', 'A', 'GD', 'Pts']]
+                return df_espn[['Pos', 'Badge', 'Club', 'Live', 'Pl', 'W', 'D', 'L', 'F', 'A', 'GD', 'Pts', 'Form']]
     except Exception:
         pass
 
+    # Fallback 2: Sky Sports
     url_sky = "https://www.skysports.com/premier-league-table"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
-    }
+    headers_sky = {'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9'}
     try:
-        r = requests.get(url_sky, headers=headers, timeout=(4, 8))
+        r = requests.get(url_sky, headers=headers_sky, timeout=(4, 8))
         if r.status_code == 200:
             tables = pd.read_html(io.StringIO(r.text))
             if tables:
@@ -622,10 +685,15 @@ def fetch_skysports_standings():
                 for col in ['Pos', 'Pl', 'W', 'D', 'L', 'F', 'A', 'Pts']:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
                 df['Badge'] = df['Club'].apply(get_club_logo)
-                return df[['Pos', 'Badge', 'Club', 'Pl', 'W', 'D', 'L', 'F', 'A', 'GD', 'Pts']]
+                df['Live'] = ''
+                df['Form'] = ''
+                return df[['Pos', 'Badge', 'Club', 'Live', 'Pl', 'W', 'D', 'L', 'F', 'A', 'GD', 'Pts', 'Form']]
     except Exception:
         pass
+
     return pd.DataFrame()
+
+fetch_skysports_standings = fetch_goal_standings
 
 # ==============================================================================
 # 5. ระบบดึงและสร้างโปรแกรมการแข่งขันพรีเมียร์ลีกครบทั้งฤดูกาล (38 MATCHWEEKS)
