@@ -1,8 +1,17 @@
 import streamlit as st
 import feedparser
+import requests
 from dateutil import parser as date_parser
 from datetime import datetime
 from bs4 import BeautifulSoup
+import unicodedata
+
+# Headers มาตรฐานเพื่อป้องกันการโดนบล็อกจาก RSS Server
+HTTP_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'application/rss+xml, application/rdf+xml, application/atom+xml, application/xml, text/xml, */*;q=0.1',
+    'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7'
+}
 
 # รายชื่อช่องสัญญาณข่าว RSS แยกตามหมวดหมู่
 RSS_CATEGORIES = {
@@ -27,7 +36,7 @@ RSS_CATEGORIES = {
         ("📉 Financial Times - Markets", "https://www.ft.com/markets?format=rss"),
         ("🥇 Investing.com - Gold News", "https://www.investing.com/rss/news_273.rss"),
         ("💰 Investing.com - Commodities", "https://www.investing.com/rss/news_11.rss"),
-        ("📊 CNBC Top News", "https://search.cnbc.com/rs/search/combined hazard/rss/top_news.rss")
+        ("📊 CNBC Top News", "https://search.cnbc.com/rs/search/combinedhazard/rss/top_news.rss")
     ],
     "🌍 World News & Geopolitics": [
         ("⚔️ Al Jazeera - Breaking News", "https://www.aljazeera.com/xml/rss/all.xml"),
@@ -47,25 +56,88 @@ RSS_CATEGORIES = {
     ]
 }
 
-def clean_html_text(raw_html):
-    """สกัดข้อความสะอาดจาก HTML tags"""
+def clean_html_text(raw_html: str) -> str:
+    """สกัดข้อความสะอาดจาก HTML tags พร้อม Normalize Unicode ภาษาไทย"""
     if not raw_html:
         return ""
-    soup = BeautifulSoup(raw_html, "html.parser")
-    text = soup.get_text(separator=" ", strip=True)
-    return text
+    try:
+        soup = BeautifulSoup(str(raw_html), "html.parser")
+        text = soup.get_text(separator=" ", strip=True)
+        return unicodedata.normalize("NFC", text)
+    except Exception:
+        return str(raw_html)
 
-def parse_entry_date(entry):
-    """แปลงวันเวลาของข่าวสำหรับจัดเรียง"""
-    date_str = getattr(entry, 'published', '') or getattr(entry, 'updated', '')
+def parse_entry_date(date_str: str) -> datetime:
+    """แปลงวันเวลาของข่าวสำหรับจัดเรียงลำดับจากใหม่สุดไปเก่าสุด"""
     if not date_str:
         return datetime.min.replace(tzinfo=datetime.now().astimezone().tzinfo)
     try:
-        return date_parser.parse(date_str)
+        return date_parser.parse(str(date_str))
     except Exception:
         return datetime.min.replace(tzinfo=datetime.now().astimezone().tzinfo)
 
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_rss_feed_entries(feed_url: str) -> list:
+    """
+    ดึงและประมวลผลข่าวจาก RSS Feed แบบแคชข้อมูล (TTL 5 นาที)
+    พร้อมระบบ Defensive Fallback กรณีเครือข่ายขัดข้อง
+    """
+    if not feed_url or not feed_url.startswith(("http://", "https://")):
+        return []
+
+    entries_data = []
+    
+    # 1. พยายามดาวน์โหลดผ่าน requests ก่อนเพื่อให้ส่ง custom header ได้อย่างสมบูรณ์
+    try:
+        resp = requests.get(feed_url, headers=HTTP_HEADERS, timeout=(5, 15))
+        if resp.status_code == 200 and resp.content:
+            parsed = feedparser.parse(resp.content)
+            if parsed.entries:
+                for entry in parsed.entries:
+                    title = getattr(entry, 'title', '') or ''
+                    link = getattr(entry, 'link', '') or '#'
+                    pub_date = getattr(entry, 'published', '') or getattr(entry, 'updated', '') or ''
+                    raw_desc = getattr(entry, 'description', '') or getattr(entry, 'summary', '') or ''
+                    
+                    entries_data.append({
+                        'title': clean_html_text(title),
+                        'link': str(link).strip(),
+                        'published': str(pub_date).strip(),
+                        'description': clean_html_text(raw_desc),
+                        '_dt': parse_entry_date(pub_date)
+                    })
+    except Exception:
+        pass
+
+    # 2. สำรองด้วย feedparser.parse โดยตรงหาก requests มีปัญหา
+    if not entries_data:
+        try:
+            parsed = feedparser.parse(feed_url)
+            if parsed.entries:
+                for entry in parsed.entries:
+                    title = getattr(entry, 'title', '') or ''
+                    link = getattr(entry, 'link', '') or '#'
+                    pub_date = getattr(entry, 'published', '') or getattr(entry, 'updated', '') or ''
+                    raw_desc = getattr(entry, 'description', '') or getattr(entry, 'summary', '') or ''
+                    
+                    entries_data.append({
+                        'title': clean_html_text(title),
+                        'link': str(link).strip(),
+                        'published': str(pub_date).strip(),
+                        'description': clean_html_text(raw_desc),
+                        '_dt': parse_entry_date(pub_date)
+                    })
+        except Exception:
+            pass
+
+    # จัดเรียงตามวันเวลาจากใหม่สุดไปเก่าสุด
+    if entries_data:
+        entries_data = sorted(entries_data, key=lambda x: x.get('_dt', datetime.min), reverse=True)
+
+    return entries_data
+
 def render_rss_page():
+    """หน้าจอหลัก Curated RSS Live Feeds"""
     st.markdown("#### 📡 Curated RSS Live Feeds (ศูนย์รวมข่าวสารสดรอบโลก)")
     st.caption("ดึงข้อมูลข่าวสารสดจากสำนักข่าวชั้นนำทั้งในและต่างประเทศ อ่านสรุปสาระสำคัญได้ทันทีโดยไม่ต้องพึ่งพา API Key")
 
@@ -75,10 +147,10 @@ def render_rss_page():
         category_choice = st.selectbox("📂 หมวดหมู่ข่าว:", list(RSS_CATEGORIES.keys()), key="rss_cat_choice")
     
     with col_src:
-        sources_in_cat = RSS_CATEGORIES[category_choice]
+        sources_in_cat = RSS_CATEGORIES.get(category_choice, [])
         source_titles = [s[0] for s in sources_in_cat]
         selected_source_title = st.selectbox("📻 เลือกช่องสัญญาณข่าว:", source_titles, key="rss_src_choice")
-        chosen_url = next(s[1] for s in sources_in_cat if s[0] == selected_source_title)
+        chosen_url = next((s[1] for s in sources_in_cat if s[0] == selected_source_title), "")
 
     with col_limit:
         max_fetch = st.number_input("จำนวนข่าว:", min_value=5, max_value=100, value=25, step=5, key="rss_limit_input")
@@ -90,22 +162,16 @@ def render_rss_page():
     with col_search:
         keyword_filter = st.text_input("🔍 ค้นหาหัวข้อข่าวในฟีดนี้:", placeholder="พิมพ์คำค้นหา เช่น AI, Gold, Liverpool...", key="rss_keyword_filter")
 
-    # บันทึกสถานะ feed ปัจจุบัน
-    cache_key = f"feed_cache_{chosen_url}"
-    if btn_refresh or cache_key not in st.session_state:
-        with st.spinner(f"กำลังเชื่อมต่อและดึงฟีดสดจาก {selected_source_title}..."):
-            try:
-                parsed_feed = feedparser.parse(chosen_url)
-                if parsed_feed.entries:
-                    sorted_entries = sorted(parsed_feed.entries, key=parse_entry_date, reverse=True)
-                    st.session_state[cache_key] = sorted_entries
-                else:
-                    st.session_state[cache_key] = []
-            except Exception as e:
-                st.error(f"❌ เกิดข้อผิดพลาดในการโหลดฟีด: {str(e)}")
-                st.session_state[cache_key] = []
+    if btn_refresh:
+        fetch_rss_feed_entries.clear()
 
-    feed_entries = st.session_state.get(cache_key, [])
+    # ดึงข้อมูลผ่าน Cached Function
+    with st.spinner(f"กำลังเชื่อมต่อและดึงฟีดสดจาก {selected_source_title}..."):
+        try:
+            feed_entries = fetch_rss_feed_entries(chosen_url)
+        except Exception as e:
+            st.warning(f"⚠️ เกิดข้อผิดพลาดในการโหลดฟีด: {str(e)}")
+            feed_entries = []
 
     if feed_entries:
         # กรองตาม keyword ถ้ามี
@@ -113,7 +179,7 @@ def render_rss_page():
             kw = keyword_filter.strip().lower()
             filtered_entries = [
                 e for e in feed_entries 
-                if kw in str(getattr(e, 'title', '')).lower() or kw in str(getattr(e, 'description', '')).lower()
+                if kw in str(e.get('title', '')).lower() or kw in str(e.get('description', '')).lower()
             ]
         else:
             filtered_entries = feed_entries
@@ -134,12 +200,10 @@ def render_rss_page():
             return
 
         for idx, entry in enumerate(display_entries):
-            title = getattr(entry, 'title', 'ไม่มีหัวข้อข่าว')
-            link = getattr(entry, 'link', '#')
-            pub_date = getattr(entry, 'published', '') or getattr(entry, 'updated', '')
-            
-            raw_desc = getattr(entry, 'description', '') or getattr(entry, 'summary', '')
-            clean_desc = clean_html_text(raw_desc)
+            title = entry.get('title', 'ไม่มีหัวข้อข่าว')
+            link = entry.get('link', '#')
+            pub_date = entry.get('published', '')
+            clean_desc = entry.get('description', '')
             if len(clean_desc) > 350:
                 clean_desc = clean_desc[:350] + "..."
 
@@ -150,7 +214,7 @@ def render_rss_page():
                         <span style="font-size: 0.75rem; color: #64748B; font-weight: 600;">🕒 {pub_date}</span>
                     </div>
                     <div class="news-title" style="font-size: 1.05rem; margin-bottom: 8px; color: #0F172A;">
-                        <a href="{link}" target="_blank" style="text-decoration: none; color: inherit; hover: color: #2563EB;">
+                        <a href="{link}" target="_blank" style="text-decoration: none; color: inherit;">
                             {title}
                         </a>
                     </div>

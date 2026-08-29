@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import feedparser
 import json
 import re
+import unicodedata
 from datetime import datetime
 from dateutil import parser as date_parser
 from urllib.parse import urljoin
@@ -33,7 +34,6 @@ PLAYLIST_SOURCES = [
     ("🎹 Piano & I Full Episode (โต๋ ศักดิ์สิทธิ์)", "https://www.youtube.com/playlist?list=PLtUbzX7Ih0cdimx9-47gWUdLPlclOCj14"),
 ]
 
-# รายการช่อง YouTube ครบทุกหมวดหมู่ (IT, อนิเมะ/การ์ตูน/สปอยล์หนัง, ฟุตบอล)
 CHANNEL_SOURCES = [
     # --- หมวด 1: IT, เทคโนโลยี & Coding ---
     ("📱 beartai แบไต๋ (ข่าวสารไอที, เทคโนโลยี & สาระน่ารู้)", "https://www.youtube.com/@beartai/videos", "https://www.youtube.com/feeds/videos.xml?channel_id=UC5P5NlgQmjinm_M4OCzbOHA", "IT & Tech"),
@@ -85,11 +85,12 @@ CHANNEL_SOURCES = [
 
 HTTP_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7'
+    'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
 }
 
 def normalize_youtube_url(url, entry=None):
-    """แปลงลิงก์ YouTube (รวมถึง /shorts/, youtu.be, playlist url) ให้เป็นรูปแบบมาตรฐานสำหรับ Streamlit Player"""
+    """แปลงลิงก์ YouTube ให้เป็นรูปแบบมาตรฐานสำหรับ Streamlit Video Player"""
     if entry is not None:
         if isinstance(entry, dict) and entry.get('id'):
             return f"https://www.youtube.com/watch?v={entry['id']}"
@@ -109,19 +110,17 @@ def parse_entry_date(entry):
     if not date_str:
         return datetime.min.replace(tzinfo=datetime.now().astimezone().tzinfo)
     try:
-        return date_parser.parse(date_str)
+        return date_parser.parse(str(date_str))
     except Exception:
         return datetime.min.replace(tzinfo=datetime.now().astimezone().tzinfo)
 
 def get_recency_score(video_item):
     """
     คำนวณคะแนนความใหม่ (ยิ่งน้อย = ยิ่งใหม่ เช่น 0 = เพิ่งลง, ตัวเลขมาก = นานแล้ว)
-    โดยตรวจจาก meta ('...ที่ผ่านมา', '...ที่แล้ว') และวันที่ในชื่อคลิป
     """
     meta = str(video_item.get('meta', ''))
     title = str(video_item.get('title', ''))
     
-    # 1. ตรวจ relative time ใน meta เช่น "16 นาทีที่ผ่านมา", "14 ชั่วโมงที่ผ่านมา", "7 วันที่ผ่านมา", "2 ปีที่แล้ว"
     m_min = re.search(r'(\d+)\s*(?:นาที|minute)', meta)
     if m_min:
         return int(m_min.group(1)) * 1
@@ -146,30 +145,29 @@ def get_recency_score(video_item):
     if m_yr:
         return int(m_yr.group(1)) * 525600
 
-    # 2. ตรวจวันที่ภาษาไทยในชื่อคลิป เช่น "19 ส.ค. 69", "3 เม.ย. 67"
     months = {
         'ม.ค.': 1, 'ก.พ.': 2, 'มี.ค.': 3, 'เม.ย.': 4, 'พ.ค.': 5, 'มิ.ย.': 6,
         'ก.ค.': 7, 'ส.ค.': 8, 'ก.ย.': 9, 'ต.ค.': 10, 'พ.ย.': 11, 'ธ.ค.': 12
     }
     date_m = re.search(r'(\d{1,2})\s*([ก-๙\.]+)\s*(\d{2,4})', title)
     if date_m:
-        d = int(date_m.group(1))
-        m_str = date_m.group(2)
-        y = int(date_m.group(3))
-        if y < 100:
-            y += 2500
-        for k, v in months.items():
-            if k in m_str:
-                days_since = (2570 - y) * 365 + (12 - v) * 30 + (31 - d)
-                return days_since * 1440
+        try:
+            d = int(date_m.group(1))
+            m_str = date_m.group(2)
+            y = int(date_m.group(3))
+            if y < 100:
+                y += 2500
+            for k, v in months.items():
+                if k in m_str:
+                    days_since = (2570 - y) * 365 + (12 - v) * 30 + (31 - d)
+                    return days_since * 1440
+        except Exception:
+            pass
 
     return 999999999
 
 def extract_clean_time_label(meta_info, title=""):
-    """
-    ดึงเฉพาะข้อมูลเวลา/ความสดใหม่ที่กระชับ เพื่อแสดงใน Dropdown
-    ตัดชื่อช่อง, ยอดวิว และคำฟุ่มเฟือยออก เหลือเฉพาะ เช่น '15 ชม. ก่อน', '7 วันก่อน', '1 เดือนก่อน' หรือ 'ล่าสุด'
-    """
+    """ดึงเฉพาะข้อมูลเวลา/ความสดใหม่ที่กระชับ เพื่อแสดงใน Dropdown"""
     if not meta_info:
         return "ล่าสุด"
     
@@ -215,14 +213,14 @@ def extract_continuation_token(node):
     _find(node)
     return found[0] if found else None
 
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_youtube_playlist_videos(playlist_info, max_items=30, sort_by="newest"):
     """
-    ดึงคลิปวิดีโอจาก YouTube Playlist แบบยืดหยุ่น (สูงสุด 300 คลิป)
+    ดึงคลิปวิดีโอจาก YouTube Playlist แบบยืดหยุ่น (1-300 คลิป) พร้อม Caching (TTL 5 นาที)
     รองรับการจัดเรียงคลิปตามเวลาจริง (Newest First), ลำดับเดิม (Original), หรือเก่าสุด (Oldest)
     """
-    raw_url = playlist_info[1] if isinstance(playlist_info, (list, tuple)) else str(playlist_info)
+    raw_url = playlist_info[1] if isinstance(playlist_info, (list, tuple)) and len(playlist_info) > 1 else str(playlist_info)
     
-    # สกัด playlist_id
     pl_id = raw_url
     if "playlist_id=" in raw_url:
         m = re.search(r'playlist_id=([a-zA-Z0-9_-]+)', raw_url)
@@ -238,10 +236,10 @@ def fetch_youtube_playlist_videos(playlist_info, max_items=30, sort_by="newest")
     videos = []
     seen_ids = set()
 
-    # 1. ดึงข้อมูลจากหน้าเว็บ YouTube Playlist โดยตรง
+    # 1. ดึงข้อมูลจากหน้าเว็บ YouTube Playlist
     try:
         url = f"https://www.youtube.com/playlist?list={pl_id}"
-        r = requests.get(url, headers=HTTP_HEADERS, timeout=10)
+        r = requests.get(url, headers=HTTP_HEADERS, timeout=(5, 12))
         idx = r.text.find('ytInitialData')
         if idx != -1:
             sub = r.text[idx:]
@@ -251,7 +249,6 @@ def fetch_youtube_playlist_videos(playlist_info, max_items=30, sort_by="newest")
 
                 def parse_item(node):
                     if isinstance(node, dict):
-                        # Modern lockupViewModel
                         if 'lockupViewModel' in node:
                             lockup = node['lockupViewModel']
                             cid = lockup.get('contentId', '')
@@ -272,12 +269,11 @@ def fetch_youtube_playlist_videos(playlist_info, max_items=30, sort_by="newest")
                                 seen_ids.add(cid)
                                 videos.append({
                                     'id': cid,
-                                    'title': title,
+                                    'title': unicodedata.normalize("NFC", title),
                                     'link': f"https://www.youtube.com/watch?v={cid}&list={pl_id}",
                                     'meta': " • ".join(snippets) if snippets else "ล่าสุด",
                                     'description': ''
                                 })
-                        # Classic playlistVideoRenderer
                         elif 'playlistVideoRenderer' in node:
                             pvr = node['playlistVideoRenderer']
                             cid = pvr.get('videoId', '')
@@ -296,12 +292,11 @@ def fetch_youtube_playlist_videos(playlist_info, max_items=30, sort_by="newest")
                                 seen_ids.add(cid)
                                 videos.append({
                                     'id': cid,
-                                    'title': title,
+                                    'title': unicodedata.normalize("NFC", title),
                                     'link': f"https://www.youtube.com/watch?v={cid}&list={pl_id}",
                                     'meta': " • ".join(snippets) if snippets else "ล่าสุด",
                                     'description': ''
                                 })
-                        # Classic videoRenderer
                         elif 'videoRenderer' in node:
                             vr = node['videoRenderer']
                             cid = vr.get('videoId', '')
@@ -314,7 +309,7 @@ def fetch_youtube_playlist_videos(playlist_info, max_items=30, sort_by="newest")
                                 seen_ids.add(cid)
                                 videos.append({
                                     'id': cid,
-                                    'title': title,
+                                    'title': unicodedata.normalize("NFC", title),
                                     'link': f"https://www.youtube.com/watch?v={cid}&list={pl_id}",
                                     'meta': "ล่าสุด",
                                     'description': ''
@@ -327,7 +322,7 @@ def fetch_youtube_playlist_videos(playlist_info, max_items=30, sort_by="newest")
 
                 parse_item(data)
 
-                # ดึงหน้าถัดไปด้วย Continuation Token หากต้องการมากกว่าที่มีในหน้าแรก (สูงสุด 300 คลิป)
+                # Pagination ผ่าน Continuation Token หากต้องการมากกว่าที่มีในหน้าแรก
                 fetch_pool_target = max(max_items, 300)
                 if len(videos) < fetch_pool_target:
                     api_key_match = re.search(r'"INNERTUBE_API_KEY":"([a-zA-Z0-9_-]+)"', r.text)
@@ -343,7 +338,7 @@ def fetch_youtube_playlist_videos(playlist_info, max_items=30, sort_by="newest")
                                 "continuation": curr_token
                             }
                             try:
-                                r_cont = requests.post(api_url, json=payload, headers=HTTP_HEADERS, timeout=8)
+                                r_cont = requests.post(api_url, json=payload, headers=HTTP_HEADERS, timeout=(4, 10))
                                 if r_cont.status_code == 200:
                                     d_cont = r_cont.json()
                                     parse_item(d_cont)
@@ -369,7 +364,7 @@ def fetch_youtube_playlist_videos(playlist_info, max_items=30, sort_by="newest")
                     seen_ids.add(vid)
                     videos.append({
                         'id': vid,
-                        'title': title,
+                        'title': unicodedata.normalize("NFC", title),
                         'link': link,
                         'meta': pub or "ล่าสุด",
                         'description': getattr(e, 'description', '')
@@ -377,31 +372,30 @@ def fetch_youtube_playlist_videos(playlist_info, max_items=30, sort_by="newest")
         except Exception:
             pass
 
-    # 3. จัดเรียงตามเงื่อนไขที่ผู้ใช้เลือกก่อนตัดตามจำนวน max_items
+    # 3. จัดเรียงตามเงื่อนไข
     if sort_by == "newest":
         videos = sorted(videos, key=get_recency_score)
     elif sort_by == "oldest":
         videos = sorted(videos, key=get_recency_score, reverse=True)
-    # else original: keep as is
 
     return videos[:max_items]
 
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_youtube_channel_videos(channel_info, max_items=20, sort_by="newest"):
     """
-    ดึงคลิปวิดีโอจาก YouTube Channel แบบยืดหยุ่น (1-100 คลิป)
+    ดึงคลิปวิดีโอจาก YouTube Channel แบบยืดหยุ่น (1-300 คลิป) พร้อม Caching (TTL 5 นาที)
     รองรับการจัดเรียงคลิปตามเวลาจริง (Newest First), ลำดับเดิม (Original), หรือเก่าสุด (Oldest)
     """
-    web_url = channel_info[1] if isinstance(channel_info, (list, tuple)) else str(channel_info)
+    web_url = channel_info[1] if isinstance(channel_info, (list, tuple)) and len(channel_info) > 1 else str(channel_info)
     feed_url = channel_info[2] if isinstance(channel_info, (list, tuple)) and len(channel_info) > 2 else ""
     
-    # ตรวจสอบว่าเป็น Playlist URL หรือไม่ ถ้าใช่ให้ส่งต่อไปยัง Playlist Fetcher ทันที
     if "list=" in web_url or "/playlist" in web_url:
         return fetch_youtube_playlist_videos(channel_info, max_items=max_items, sort_by=sort_by)
 
     videos = []
     seen_ids = set()
     
-    # 1. ดึงข้อมูลจากหน้าเว็บ YouTube /videos หรือ /streams เพื่อให้ได้คลิปจำนวนมาก (สูงสุด 100 คลิป)
+    # 1. ดึงข้อมูลจากหน้าเว็บ YouTube
     try:
         url = web_url
         if "@" in url and not any(url.endswith(suffix) for suffix in ["/videos", "/streams", "/shorts", "/live", "/playlists"]):
@@ -409,7 +403,7 @@ def fetch_youtube_channel_videos(channel_info, max_items=20, sort_by="newest"):
         elif "channel/" in url and not any(url.endswith(suffix) for suffix in ["/videos", "/streams", "/shorts", "/live", "/playlists"]):
             url = url.rstrip("/") + "/videos"
             
-        r = requests.get(url, headers=HTTP_HEADERS, timeout=8)
+        r = requests.get(url, headers=HTTP_HEADERS, timeout=(5, 12))
         idx = r.text.find('ytInitialData')
         if idx != -1:
             sub = r.text[idx:]
@@ -419,7 +413,6 @@ def fetch_youtube_channel_videos(channel_info, max_items=20, sort_by="newest"):
                 
                 def parse_item(node):
                     if isinstance(node, dict):
-                        # Modern lockupViewModel
                         if 'lockupViewModel' in node:
                             lockup = node['lockupViewModel']
                             cid = lockup.get('contentId', '')
@@ -438,12 +431,11 @@ def fetch_youtube_channel_videos(channel_info, max_items=20, sort_by="newest"):
                                 seen_ids.add(cid)
                                 videos.append({
                                     'id': cid,
-                                    'title': title,
+                                    'title': unicodedata.normalize("NFC", title),
                                     'link': f"https://www.youtube.com/watch?v={cid}",
                                     'meta': " • ".join(snippets) if snippets else "ล่าสุด",
                                     'description': ''
                                 })
-                        # Classic videoRenderer
                         if 'videoRenderer' in node:
                             vr = node['videoRenderer']
                             vid = vr.get('videoId')
@@ -459,7 +451,7 @@ def fetch_youtube_channel_videos(channel_info, max_items=20, sort_by="newest"):
                                 seen_ids.add(vid)
                                 videos.append({
                                     'id': vid,
-                                    'title': title,
+                                    'title': unicodedata.normalize("NFC", title),
                                     'link': f"https://www.youtube.com/watch?v={vid}",
                                     'meta': pub or "ล่าสุด",
                                     'description': ''
@@ -472,7 +464,6 @@ def fetch_youtube_channel_videos(channel_info, max_items=20, sort_by="newest"):
                             
                 parse_item(data)
                 
-                # หากต้องการคลิปมากกว่าหน้าแรก ให้ดึงหน้าถัดไปผ่าน Innertube Continuation Token (สูงสุด 300 คลิป)
                 fetch_pool_target = max(max_items, 300)
                 if len(videos) < fetch_pool_target:
                     api_key_match = re.search(r'"INNERTUBE_API_KEY":"([a-zA-Z0-9_-]+)"', r.text)
@@ -488,7 +479,7 @@ def fetch_youtube_channel_videos(channel_info, max_items=20, sort_by="newest"):
                                 "continuation": curr_token
                             }
                             try:
-                                r_cont = requests.post(api_url, json=payload, headers=HTTP_HEADERS, timeout=8)
+                                r_cont = requests.post(api_url, json=payload, headers=HTTP_HEADERS, timeout=(4, 10))
                                 if r_cont.status_code == 200:
                                     d_cont = r_cont.json()
                                     parse_item(d_cont)
@@ -513,7 +504,7 @@ def fetch_youtube_channel_videos(channel_info, max_items=20, sort_by="newest"):
                     seen_ids.add(vid)
                     videos.append({
                         'id': vid,
-                        'title': title,
+                        'title': unicodedata.normalize("NFC", title),
                         'link': link,
                         'meta': pub or "ล่าสุด",
                         'description': getattr(e, 'description', '')
@@ -521,30 +512,30 @@ def fetch_youtube_channel_videos(channel_info, max_items=20, sort_by="newest"):
         except Exception:
             pass
 
-    # 3. จัดเรียงตามเงื่อนไขที่ผู้ใช้เลือกก่อนตัดตามจำนวน max_items
+    # 3. จัดเรียงตามเงื่อนไข
     if sort_by == "newest":
         videos = sorted(videos, key=get_recency_score)
     elif sort_by == "oldest":
         videos = sorted(videos, key=get_recency_score, reverse=True)
-    # else original: keep as is
             
     return videos[:max_items]
 
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_web_news_articles(src_tuple, limit=15):
     """
-    ดึงหัวข้อข่าวและลิงก์จากเว็บไซต์ข่าว โดยรองรับ Fallback Feed/Google News RSS
-    เพื่อให้ทำงานได้สมบูรณ์ทั้งบน Local และ Streamlit Cloud (ป้องกันการโดน Geoblock หรือ Datacenter IP block)
+    ดึงหัวข้อข่าวและลิงก์จากเว็บไซต์ข่าว พร้อม Caching (TTL 5 นาที)
+    และระบบ Fallback RSS Feed / Google News อัตโนมัติ
     """
-    web_url = src_tuple[1]
-    fallback_feed = src_tuple[2] if len(src_tuple) > 2 else ""
+    web_url = src_tuple[1] if isinstance(src_tuple, (list, tuple)) and len(src_tuple) > 1 else str(src_tuple)
+    fallback_feed = src_tuple[2] if isinstance(src_tuple, (list, tuple)) and len(src_tuple) > 2 else ""
     
     articles = []
     seen_txt = set()
     
     # 1. พยายามดึงแบบ Direct Scraping จากเว็บต้นทาง
     try:
-        r = requests.get(web_url, headers=HTTP_HEADERS, timeout=8)
-        if r.status_code == 200 and len(r.text) > 1000:
+        r = requests.get(web_url, headers=HTTP_HEADERS, timeout=(5, 10))
+        if r.status_code == 200 and len(r.text) > 500:
             r.encoding = 'utf-8' if 'utf-8' in (r.encoding or '').lower() else (r.apparent_encoding or 'utf-8')
             soup = BeautifulSoup(r.text, 'html.parser')
             for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'a']):
@@ -556,22 +547,23 @@ def fetch_web_news_articles(src_tuple, limit=15):
                 if link and not link.startswith(('http://', 'https://')):
                     link = urljoin(web_url, link)
                 
-                # ทำความสะอาดชื่อพาดหัวข่าว
                 txt = re.sub(r'^\d+(\.\d+)?[Kk]?\s*(News)?\s*', '', txt).strip()
-                if txt and len(txt) > 20 and len(txt) < 200 and txt not in seen_txt:
+                txt = unicodedata.normalize("NFC", txt)
+                if txt and 20 < len(txt) < 220 and txt not in seen_txt:
                     if not any(skip in txt.lower() for skip in ['cookie', 'privacy', 'policy', 'terms', 'ติดต่อเรา', 'เข้าสู่ระบบ', 'สมัครสมาชิก', 'facebook', 'twitter', 'share', 'line', 'javascript:']):
                         seen_txt.add(txt)
                         articles.append({'title': txt, 'link': link or web_url})
     except Exception:
         pass
 
-    # 2. หาก Direct Scraping โดนบล็อก หรือได้ข่าวน้อยกว่า 3 รายการ ให้ดึงจาก Fallback RSS Feed / Google News ทันที
+    # 2. หาก Direct Scraping โดนบล็อก หรือได้ข่าวน้อย ให้ดึงจาก Fallback RSS Feed
     if len(articles) < 3 and fallback_feed:
         try:
             feed = feedparser.parse(fallback_feed)
             for entry in feed.entries:
                 raw_t = getattr(entry, 'title', '')
                 clean_t = raw_t.rsplit(' - ', 1)[0].strip() if ' - ' in raw_t else raw_t.strip()
+                clean_t = unicodedata.normalize("NFC", clean_t)
                 link = getattr(entry, 'link', web_url)
                 if clean_t and len(clean_t) > 15 and clean_t not in seen_txt:
                     seen_txt.add(clean_t)
@@ -582,6 +574,7 @@ def fetch_web_news_articles(src_tuple, limit=15):
     return articles[:limit]
 
 def render_tech_hub_page():
+    """หน้าจอหลัก Tech & Media Intelligence Hub"""
     st.markdown("#### 📺 Tech & Media Intelligence Hub")
     tab1, tab2, tab3 = st.tabs(["🌐 เว็บไซต์ข่าว", "📋 YouTube Playlists", "🎥 YouTube Channels"])
 
@@ -600,17 +593,16 @@ def render_tech_hub_page():
         with col_count:
             web_limit = st.selectbox("จำนวนหัวข้อ:", [10, 15, 20, 30], index=1, key="web_limit_sel")
 
-        web_cache_key = f"web_cache_{selected_web[1]}_{web_limit}"
-        
-        if btn_scan or web_cache_key not in st.session_state:
-            with st.spinner(f"กำลังเชื่อมต่อและดึงหัวข้อข่าวสดจาก {selected_web[0]}..."):
-                try:
-                    st.session_state[web_cache_key] = fetch_web_news_articles(selected_web, limit=web_limit)
-                except Exception as e:
-                    st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
-                    st.session_state[web_cache_key] = []
+        if btn_scan:
+            fetch_web_news_articles.clear()
 
-        cached_articles = st.session_state.get(web_cache_key, [])
+        with st.spinner(f"กำลังเชื่อมต่อและดึงหัวข้อข่าวสดจาก {selected_web[0]}..."):
+            try:
+                cached_articles = fetch_web_news_articles(selected_web, limit=web_limit)
+            except Exception as e:
+                st.warning(f"⚠️ เกิดข้อผิดพลาดในการโหลดข่าว: {str(e)}")
+                cached_articles = []
+
         if cached_articles:
             st.markdown(f"##### 📰 หัวข้อข่าวเด่นจาก {selected_web[0]} (ทั้งหมด {len(cached_articles)} ข่าว):")
             for idx, art in enumerate(cached_articles):
@@ -624,14 +616,13 @@ def render_tech_hub_page():
                 with col_b:
                     st.link_button("🔗 อ่านข่าวนี้", art['link'], use_container_width=True)
         else:
-            st.info("ไม่พบรายการข่าวที่แยกแยะได้ชัดเจน หรือเว็บไซต์มีการป้องกันการเข้าถึง")
+            st.info("ℹ️ ไม่พบรายการข่าวที่แยกแยะได้ชัดเจน หรือเว็บไซต์มีการป้องกันการเข้าถึง")
 
     # --- TAB 2: YouTube Playlists ---
     with tab2:
         selected_pl = st.selectbox("📋 เลือก Playlist:", PLAYLIST_SOURCES, format_func=lambda x: x[0], key="pl_sel")
         custom_pl_input = st.text_input("🔗 หรือใส่ URL Playlist เพิ่มเติม:", placeholder="https://www.youtube.com/playlist?list=...", key="custom_pl_input")
 
-        # เลือก Playlist เป้าหมาย
         active_pl_target = custom_pl_input.strip() if custom_pl_input.strip() else selected_pl
         pl_display_name = active_pl_target[0] if isinstance(active_pl_target, (list, tuple)) else active_pl_target
 
@@ -676,7 +667,6 @@ def render_tech_hub_page():
             if st.button("⚡ 300 คลิป", use_container_width=True, key="btn_pl_300"):
                 pl_quick_count = 300
 
-        # สไลเดอร์ระบุจำนวนคลิปเองแบบละเอียด (1 - 300 คลิป)
         pl_slider_col1, pl_slider_col2 = st.columns([2.6, 1.4])
         with pl_slider_col1:
             pl_slider_count = st.slider(
@@ -691,30 +681,33 @@ def render_tech_hub_page():
             st.write("")
             pl_btn_custom = st.button("📥 ดึงตามสไลเดอร์", use_container_width=True, key="btn_pl_slider_fetch")
 
-        # ตรวจสอบการเปลี่ยน Playlist หรือกดปุ่ม
-        pl_cache_key = f"pl_cache_{pl_display_name}_{chosen_pl_sort}"
-        final_pl_count_to_fetch = pl_quick_count if pl_quick_count is not None else (pl_slider_count if pl_btn_custom else None)
+        if 'pl_current_count' not in st.session_state:
+            st.session_state['pl_current_count'] = 30
 
-        if final_pl_count_to_fetch is not None or pl_cache_key not in st.session_state:
-            fetch_cnt = final_pl_count_to_fetch or 20
-            with st.spinner(f"กำลังเชื่อมต่อและดึง {fetch_cnt} คลิป จาก {pl_display_name}..."):
-                st.session_state['pl_videos'] = fetch_youtube_playlist_videos(
+        if pl_quick_count is not None:
+            st.session_state['pl_current_count'] = pl_quick_count
+        elif pl_btn_custom:
+            st.session_state['pl_current_count'] = pl_slider_count
+
+        fetch_cnt = st.session_state.get('pl_current_count', 30)
+
+        with st.spinner(f"กำลังเชื่อมต่อและดึง {fetch_cnt} คลิป จาก {pl_display_name}..."):
+            try:
+                pl_videos = fetch_youtube_playlist_videos(
                     active_pl_target, 
                     max_items=fetch_cnt, 
                     sort_by=chosen_pl_sort
                 )
-                st.session_state['pl_last_source'] = pl_display_name
-                st.session_state[pl_cache_key] = st.session_state['pl_videos']
-        else:
-            st.session_state['pl_videos'] = st.session_state.get(pl_cache_key, [])
+            except Exception as e:
+                st.warning(f"⚠️ เกิดข้อผิดพลาดในการโหลด Playlist: {str(e)}")
+                pl_videos = []
 
-        if st.session_state.get('pl_videos'):
+        if pl_videos:
             st.markdown("---")
-            pl_source_tag = st.session_state.get('pl_last_source', pl_display_name)
-            st.caption(f"📁 รายการคลิปจาก Playlist: **{pl_source_tag}** (ทั้งหมด {len(st.session_state['pl_videos'])} คลิป)")
+            st.caption(f"📁 รายการคลิปจาก Playlist: **{pl_display_name}** (ทั้งหมด {len(pl_videos)} คลิป)")
             
             pl_clip_dict = {}
-            for idx, e in enumerate(st.session_state['pl_videos']):
+            for idx, e in enumerate(pl_videos):
                 clean_title = e['title'].replace(" - YouTube", "").strip()
                 time_label = extract_clean_time_label(e.get('meta', ''), clean_title)
                 display_label = f"{idx+1}. [{time_label}] {clean_title}"
@@ -733,11 +726,10 @@ def render_tech_hub_page():
             st.write("")
             st.link_button("▶️ ดูคลิปต้นฉบับบน YouTube", video_url)
         else:
-            st.warning(f"⚠️ ไม่พบข้อมูลคลิปใน Playlist นี้ กรุณาลองใหม่อีกครั้ง")
+            st.warning(f"⚠️ ไม่พบข้อมูลคลิปใน Playlist นี้ หรือการเชื่อมต่อมีปัญหา กรุณาลองใหม่อีกครั้ง")
 
     # --- TAB 3: YouTube Channels ---
     with tab3:
-        # ตัวเลือกฟิลเตอร์หมวดหมู่ช่อง
         category_options = ["IT & Tech", "Anime & Movies", "Sports & Football", "วัดป่าโสมพนัส", "🌟 ทั้งหมด (All Categories)"]
         ch_category = st.radio(
             "📂 เลือกหมวดหมู่คอนเทนต์:",
@@ -747,7 +739,6 @@ def render_tech_hub_page():
             key="ch_category_radio"
         )
         
-        # กรองรายชื่อช่องตามหมวดหมู่ที่เลือก
         if ch_category == "🌟 ทั้งหมด (All Categories)":
             filtered_channels = CHANNEL_SOURCES
         else:
@@ -756,7 +747,6 @@ def render_tech_hub_page():
         selected_ch = st.selectbox("📺 เลือกช่อง YouTube:", filtered_channels, format_func=lambda x: x[0], key="ch_sel")
         custom_ch_input = st.text_input("🔗 หรือใส่ URL ช่อง/วิดีโอ YouTube เพิ่มเติม:", placeholder="https://www.youtube.com/@ChannelName/videos", key="custom_ch_input")
         
-        # ช่องเป้าหมาย
         active_ch_target = custom_ch_input.strip() if custom_ch_input.strip() else selected_ch
         ch_display_name = active_ch_target[0] if isinstance(active_ch_target, (list, tuple)) else active_ch_target
 
@@ -781,7 +771,7 @@ def render_tech_hub_page():
         else:
             chosen_ch_sort = "original"
 
-        # แถวปุ่มลัด 5 ปุ่ม (10, 30, 50, 100, 300 คลิป)
+        # แถวปุ่มลัด 5 ปุ่ม
         ch_b_cols = st.columns(5)
         ch_quick_count = None
         
@@ -801,7 +791,6 @@ def render_tech_hub_page():
             if st.button("⚡ 300 คลิป", use_container_width=True, key="btn_ch_300"):
                 ch_quick_count = 300
 
-        # สไลเดอร์ระบุจำนวนคลิปเองแบบละเอียด (1 - 300 คลิป)
         ch_slider_col1, ch_slider_col2 = st.columns([2.6, 1.4])
         with ch_slider_col1:
             ch_slider_count = st.slider(
@@ -816,30 +805,33 @@ def render_tech_hub_page():
             st.write("")
             ch_btn_custom = st.button("📥 ดึงตามสไลเดอร์", use_container_width=True, key="btn_ch_slider_fetch")
 
-        # ตรวจสอบการเปลี่ยนช่อง หรือกดปุ่ม
-        ch_cache_key = f"ch_cache_{ch_display_name}_{chosen_ch_sort}"
-        final_ch_count_to_fetch = ch_quick_count if ch_quick_count is not None else (ch_slider_count if ch_btn_custom else None)
+        if 'ch_current_count' not in st.session_state:
+            st.session_state['ch_current_count'] = 30
 
-        if final_ch_count_to_fetch is not None or ch_cache_key not in st.session_state:
-            fetch_ch_cnt = final_ch_count_to_fetch or 20
-            with st.spinner(f"กำลังเชื่อมต่อและดึง {fetch_ch_cnt} คลิป จาก {ch_display_name}..."):
-                st.session_state['ch_videos'] = fetch_youtube_channel_videos(
+        if ch_quick_count is not None:
+            st.session_state['ch_current_count'] = ch_quick_count
+        elif ch_btn_custom:
+            st.session_state['ch_current_count'] = ch_slider_count
+
+        fetch_ch_cnt = st.session_state.get('ch_current_count', 30)
+
+        with st.spinner(f"กำลังเชื่อมต่อและดึง {fetch_ch_cnt} คลิป จาก {ch_display_name}..."):
+            try:
+                ch_videos = fetch_youtube_channel_videos(
                     active_ch_target, 
                     max_items=fetch_ch_cnt,
                     sort_by=chosen_ch_sort
                 )
-                st.session_state['ch_last_source'] = ch_display_name
-                st.session_state[ch_cache_key] = st.session_state['ch_videos']
-        else:
-            st.session_state['ch_videos'] = st.session_state.get(ch_cache_key, [])
+            except Exception as e:
+                st.warning(f"⚠️ เกิดข้อผิดพลาดในการโหลดช่อง YouTube: {str(e)}")
+                ch_videos = []
 
-        if st.session_state.get('ch_videos'):
+        if ch_videos:
             st.markdown("---")
-            ch_source_tag = st.session_state.get('ch_last_source', ch_display_name)
-            st.caption(f"📁 รายการคลิปจากช่อง: **{ch_source_tag}** (ทั้งหมด {len(st.session_state['ch_videos'])} คลิป)")
+            st.caption(f"📁 รายการคลิปจากช่อง: **{ch_display_name}** (ทั้งหมด {len(ch_videos)} คลิป)")
             
             ch_clip_dict = {}
-            for idx, e in enumerate(st.session_state['ch_videos']):
+            for idx, e in enumerate(ch_videos):
                 clean_title = e['title'].replace(" - YouTube", "").strip()
                 time_label = extract_clean_time_label(e.get('meta', ''), clean_title)
                 display_label = f"{idx+1}. [{time_label}] {clean_title}"
@@ -858,4 +850,4 @@ def render_tech_hub_page():
             st.write("")
             st.link_button("▶️ ดูคลิปต้นฉบับบน YouTube", video_ch_url)
         else:
-            st.warning(f"⚠️ ไม่พบข้อมูลคลิปในช่องนี้ กรุณาลองใหม่อีกครั้ง")
+            st.warning(f"⚠️ ไม่พบข้อมูลคลิปในช่องนี้ หรือการเชื่อมต่อมีปัญหา กรุณาลองใหม่อีกครั้ง")

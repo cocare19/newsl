@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import json
 import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 import yfinance as yf
 from bs4 import BeautifulSoup
@@ -12,7 +13,7 @@ from config import get_club_logo
 # ==============================================================================
 # 1. ระบบดึงราคาทองคำ & ค่าเงินบาท (SPOT INTERBANK REAL-TIME - NO YAHOO)
 # ==============================================================================
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=15, show_spinner=False)
 def fetch_gold_and_spot_data():
     """ดึงราคาทองคำแท่งไทย 96.5%, Gold Spot (XAU/USD) จาก OANDA, FXStreet, Swissquote และ USD/THB สดตรง"""
     results = {
@@ -33,15 +34,15 @@ def fetch_gold_and_spot_data():
     
     # 1. ดึงราคาทองคำแท่งไทย 96.5% จาก ทองคำราคา.com
     try:
-        r_thai = requests.get("https://xn--42cah7d0cxcvbbb9x.com/ราคาทองประจำวัน/", headers=headers, timeout=4)
+        r_thai = requests.get("https://xn--42cah7d0cxcvbbb9x.com/ราคาทองประจำวัน/", headers=headers, timeout=(3, 6))
         if r_thai.status_code == 200:
             soup = BeautifulSoup(r_thai.content, "html.parser")
             for row in soup.find_all("tr"):
                 if "ทองคำแท่ง 96.5%" in row.text:
                     tds = row.find_all("td")
                     if len(tds) >= 3:
-                        results["sell"] = tds[1].text.strip()
-                        results["buy"] = tds[2].text.strip()
+                        results["sell"] = unicodedata.normalize("NFC", tds[1].text.strip())
+                        results["buy"] = unicodedata.normalize("NFC", tds[2].text.strip())
                         break
     except Exception:
         pass
@@ -61,7 +62,7 @@ def fetch_gold_and_spot_data():
             },
             "columns": ["close", "change", "change_abs", "bid", "ask", "high", "low"]
         }
-        r_fx_tv = requests.post(url_fx, headers=tv_fx_headers, json=payload_fx, timeout=4)
+        r_fx_tv = requests.post(url_fx, headers=tv_fx_headers, json=payload_fx, timeout=(3, 6))
         if r_fx_tv.status_code == 200:
             for item in r_fx_tv.json().get('data', []):
                 sym = item.get('s')
@@ -87,7 +88,7 @@ def fetch_gold_and_spot_data():
     # 3. สำรองค่าเงินบาท: Frankfurter / ExchangeRate-API
     if results["usd_thb"] == "N/A":
         try:
-            r_frank = requests.get("https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB", headers=headers, timeout=3)
+            r_frank = requests.get("https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB", headers=headers, timeout=(3, 5))
             if r_frank.status_code == 200:
                 rate = r_frank.json().get("rates", {}).get("THB")
                 if rate:
@@ -111,13 +112,13 @@ def fetch_gold_and_spot_data():
             },
             "columns": ["close", "change", "change_abs", "bid", "ask", "high", "low"]
         }
-        r_tv = requests.post(url, headers=tv_headers, json=payload, timeout=4)
+        r_tv = requests.post(url, headers=tv_headers, json=payload, timeout=(3, 6))
         if r_tv.status_code == 200:
             tv_json = r_tv.json()
             for item in tv_json.get('data', []):
                 sym = item.get('s')
                 vals = item.get('d', [])
-                if sym == "OANDA:XAUUSD" and len(vals) >= 3:
+                if sym == "OANDA:XAUUSD" and len(vals) >= 3 and vals[0] is not None:
                     close_p = vals[0]
                     chg_pct = vals[1]
                     chg_abs = vals[2]
@@ -125,7 +126,7 @@ def fetch_gold_and_spot_data():
                     results["oanda_diff"] = f"{chg_abs:+,.2f} ({chg_pct:+.2f}%)"
                     if results["spot"] == "N/A":
                         results["spot"] = results["oanda_spot"]
-                elif sym in ("TVC:GOLD", "FOREXCOM:XAUUSD") and len(vals) >= 3 and results["fxstreet_spot"] == "N/A":
+                elif sym in ("TVC:GOLD", "FOREXCOM:XAUUSD") and len(vals) >= 3 and vals[0] is not None and results["fxstreet_spot"] == "N/A":
                     close_p = vals[0]
                     chg_pct = vals[1]
                     chg_abs = vals[2]
@@ -136,7 +137,7 @@ def fetch_gold_and_spot_data():
 
     # 5. ดึง Gold Spot (XAU/USD) แหล่งหลัก: Swissquote Real-Time Live Feed
     try:
-        r_sq = requests.get("https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD", headers=headers, timeout=3)
+        r_sq = requests.get("https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD", headers=headers, timeout=(3, 5))
         if r_sq.status_code == 200:
             sq_data = r_sq.json()
             if sq_data and isinstance(sq_data, list):
@@ -153,7 +154,7 @@ def fetch_gold_and_spot_data():
     # 6. Gold Spot สำรอง: GoldPrice Direct API
     if results["spot"] == "N/A":
         try:
-            r_gp = requests.get("https://data-asg.goldprice.org/dbXRates/USD", headers=headers, timeout=3)
+            r_gp = requests.get("https://data-asg.goldprice.org/dbXRates/USD", headers=headers, timeout=(3, 5))
             if r_gp.status_code == 200:
                 items = r_gp.json().get("items", [])
                 if items:
@@ -164,13 +165,11 @@ def fetch_gold_and_spot_data():
             pass
 
     return results
-# ==============================================================================
-# 2. ระบบดึงราคาน้ำมันขายปลีกในประเทศไทย
-# ==============================================================================
+
 # ==============================================================================
 # 2. ระบบดึงราคาน้ำมันขายปลีกในประเทศไทย (Bangchak Official Real-time & History)
 # ==============================================================================
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def fetch_thai_oil():
     """ดึงราคาน้ำมันขายปลีกทุกประเภทของบางจากแบบเรียลไทม์ผ่าน API พร้อมข้อมูลการปรับราคาล่วงหน้า"""
     headers = {
@@ -188,7 +187,6 @@ def fetch_thai_oil():
         "แก๊สโซฮอล์ 95 S EVO": "แก๊สโซฮอล์ 95"
     }
     
-    # ค่าเริ่มต้นเผื่อกรณี API มีปัญหา
     oil_details = {
         "แก๊สโซฮอล์ 95": {"today": 36.84, "yesterday": 36.84, "tomorrow": 37.69, "diff_tom": 0.85, "diff_yes": 0.0},
         "แก๊สโซฮอล์ 91": {"today": 36.47, "yesterday": 36.47, "tomorrow": 37.32, "diff_tom": 0.85, "diff_yes": 0.0},
@@ -203,7 +201,7 @@ def fetch_thai_oil():
     date_now_str = ""
     
     try:
-        r = requests.get("https://oil-price.bangchak.co.th/ApiOilPrice2/th", headers=headers, timeout=5)
+        r = requests.get("https://oil-price.bangchak.co.th/ApiOilPrice2/th", headers=headers, timeout=(3, 7))
         if r.status_code == 200:
             data = r.json()
             if data and isinstance(data, list):
@@ -228,24 +226,23 @@ def fetch_thai_oil():
         pass
         
     oil_res = {k: f"{v['today']:.2f}" for k, v in oil_details.items()}
-    # เก็บข้อมูลรายละเอียดแนบไว้สำหรับฟังก์ชันประวัติและ UI
     oil_res["_details"] = oil_details
-    oil_res["_remark"] = remark
-    oil_res["_date_now"] = date_now_str
+    oil_res["_remark"] = unicodedata.normalize("NFC", str(remark))
+    oil_res["_date_now"] = str(date_now_str)
     return oil_res
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def fetch_today_oil_all_brands():
     """
     ดึงตารางเปรียบเทียบราคาน้ำมันวันนี้ทุกปั๊ม (ปตท., บางจาก, เชลล์, คาลเท็กซ์, ไออาร์พีซี, พีที, ซัสโก้, เพียว)
-    พร้อมคอลัมน์ 'พรุ่งนี้' (Tomorrow Price) ที่คอลัมน์ท้ายสุด จาก https://xn--42cah7d0cxcvbbb9x.com/ราคาน้ำมันวันนี้/
+    พร้อมคอลัมน์ 'พรุ่งนี้' (Tomorrow Price) ที่คอลัมน์ท้ายสุด
     """
     url = "https://xn--42cah7d0cxcvbbb9x.com/ราคาน้ำมันวันนี้/"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
     }
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=(4, 10))
         if r.status_code != 200:
             return pd.DataFrame()
         soup = BeautifulSoup(r.text, 'html.parser')
@@ -261,7 +258,7 @@ def fetch_today_oil_all_brands():
         
         data = []
         for tr in rows[1:]:
-            tds = [td.get_text(' ', strip=True) for td in tr.find_all(['td', 'th'])]
+            tds = [unicodedata.normalize("NFC", td.get_text(' ', strip=True)) for td in tr.find_all(['td', 'th'])]
             if tds and len(tds) >= len(headers_col):
                 row_dict = {}
                 for h, v in zip(headers_col, tds[:len(headers_col)]):
@@ -277,11 +274,10 @@ def fetch_today_oil_all_brands():
     except Exception:
         return pd.DataFrame()
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_real_historical_oil_table():
     """
     ดึงตารางบันทึกการปรับราคาน้ำมันย้อนหลังจริงจาก https://xn--42cah7d0cxcvbbb9x.com/ราคาน้ำมันย้อนหลัง/
-    (ทองคำราคา.com / ราคาน้ำมันย้อนหลัง)
     """
     url = "https://xn--42cah7d0cxcvbbb9x.com/ราคาน้ำมันย้อนหลัง/"
     headers = {
@@ -308,7 +304,7 @@ def fetch_real_historical_oil_table():
     }
 
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=(4, 10))
         if r.status_code != 200:
             return pd.DataFrame()
         html = r.text
@@ -342,7 +338,7 @@ def fetch_real_historical_oil_table():
             m_date = re.search(r'<td>([^<]+)', c0)
             if not m_date:
                 continue
-            date_thai = m_date.group(1).strip()
+            date_thai = unicodedata.normalize("NFC", m_date.group(1).strip())
             
             tds = re.findall(r'<td[^>]*>(.*?)</td>', c1)
             if not tds or len(tds) < 5:
@@ -374,14 +370,10 @@ def fetch_real_historical_oil_table():
     except Exception:
         return pd.DataFrame()
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def get_historical_thai_oil_data(live_oil_data=None, days_back=None, year_be=2569):
     """
     สร้างข้อมูลราคาน้ำมันย้อนหลังรายวันต่อเนื่องทุกวัน (Daily Continuous Time Series)
-    โดยสกัดจากตารางบันทึกจริงของ https://xn--42cah7d0cxcvbbb9x.com/
-    - ช่วงวันที่ไม่มีการปรับราคา: ราคาจะคงที่ (Forward Fill แนวนอนเรียบ)
-    - วันที่มีการประกาศปรับราคา: กราฟจะกระโดดเป็นขั้นบันไดในวันนั้นทันที
-    - รองรับการกรองตามปี (เริ่มต้นปี 2569) และจำนวนวันย้อนหลัง
     """
     table_df = fetch_real_historical_oil_table()
     if table_df.empty:
@@ -399,7 +391,6 @@ def get_historical_thai_oil_data(live_oil_data=None, days_back=None, year_be=256
         "ดีเซล", "ดีเซล B20", "ไฮ พรีเมียม ดีเซล พลัส", "ไฮ พรีเมียม 98 พลัส", "เบนซิน 95"
     ]
     
-    # ถ้าในตารางไม่มี ไฮ พรีเมียม 98 พลัส ให้ใช้อ้างอิงจาก เบนซิน 95
     if "ไฮ พรีเมียม 98 พลัส" not in df_yr.columns and "เบนซิน 95" in df_yr.columns:
         df_yr["ไฮ พรีเมียม 98 พลัส"] = df_yr["เบนซิน 95"]
         
@@ -429,10 +420,8 @@ def get_historical_thai_oil_data(live_oil_data=None, days_back=None, year_be=256
     avail_fuel_cols = [c for c in fuel_cols if c in df_sorted.columns]
     merged = pd.merge(daily_df, df_sorted[['Date'] + avail_fuel_cols], on='Date', how='left')
     
-    # Forward fill: ราคาวันที่ไม่มีการปรับราคาจะคงที่เท่ากับวันก่อนหน้าเสมอ
     merged[avail_fuel_cols] = merged[avail_fuel_cols].ffill().bfill()
     
-    # ถ้ามี live_oil_data วันนี้ ให้อัปเดตแถวล่าสุดให้ตรงกับราคาขายสดปัจจุบัน
     if live_oil_data and isinstance(live_oil_data, dict):
         last_idx = merged.index[-1]
         for c in avail_fuel_cols:
@@ -442,14 +431,13 @@ def get_historical_thai_oil_data(live_oil_data=None, days_back=None, year_be=256
                 except (ValueError, TypeError):
                     pass
                     
-    # Format Date เป็น String YYYY-MM-DD
     merged['Date'] = merged['Date'].dt.strftime('%Y-%m-%d')
     return merged
 
 # ==============================================================================
 # 3. ระบบดึงดัชนี Macro Drivers & หุ้นเทคโนโลยี / AI (Real-Time Feed)
 # ==============================================================================
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=30, show_spinner=False)
 def fetch_macro_indicators():
     """ดึงดัชนี DXY, US 10Y Yield, ราคาน้ำมันโลก (WTI & Brent), และดัชนีตลาดหุ้นหลัก"""
     headers = {
@@ -473,18 +461,17 @@ def fetch_macro_indicators():
             "symbols": {"tickers": list(global_map.keys()), "query": {"types": []}},
             "columns": ["close", "change", "change_abs"]
         }
-        r_g = requests.post(url_g, headers=headers, json=payload_g, timeout=4)
+        r_g = requests.post(url_g, headers=headers, json=payload_g, timeout=(3, 6))
         if r_g.status_code == 200:
             for item in r_g.json().get('data', []):
                 sym = item.get('s')
                 vals = item.get('d', [])
-                if sym in global_map and len(vals) >= 3:
+                if sym in global_map and len(vals) >= 3 and vals[0] is not None:
                     name = global_map[sym]
                     results[name] = (vals[0], vals[2], vals[1])
     except Exception:
         pass
 
-    # Fallback to yfinance if any missing
     fallback_map = {
         "💵 Dollar Index (DXY)": "DX-Y.NYB",
         "📉 US 10Y Yield": "^TNX",
@@ -511,7 +498,7 @@ def fetch_macro_indicators():
 
     return results
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=30, show_spinner=False)
 def fetch_tech_ai_stocks():
     """ดึงราคาหุ้นผู้นำเทคโนโลยี, AI และ Semiconductor ระดับโลกแบบ Real-Time"""
     headers = {
@@ -538,18 +525,17 @@ def fetch_tech_ai_stocks():
             "symbols": {"tickers": list(stock_map.keys()), "query": {"types": []}},
             "columns": ["close", "change", "change_abs"]
         }
-        r_s = requests.post(url_s, headers=headers, json=payload_s, timeout=4)
+        r_s = requests.post(url_s, headers=headers, json=payload_s, timeout=(3, 6))
         if r_s.status_code == 200:
             for item in r_s.json().get('data', []):
                 sym = item.get('s')
                 vals = item.get('d', [])
-                if sym in stock_map and len(vals) >= 3:
+                if sym in stock_map and len(vals) >= 3 and vals[0] is not None:
                     name = stock_map[sym]
                     results[name] = (vals[0], vals[2], vals[1])
     except Exception:
         pass
 
-    # Fallback to yfinance
     if len(results) < len(stock_map):
         fallback_stocks = {
             "🟢 NVIDIA Corp (NVDA)": "NVDA",
@@ -583,10 +569,9 @@ def fetch_tech_ai_stocks():
 # ==============================================================================
 # 4. ระบบดึงตารางคะแนนพรีเมียร์ลีก Real-Time Live Standings (20 สโมสร)
 # ==============================================================================
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def fetch_skysports_standings():
-    """ดึงตารางคะแนนพรีเมียร์ลีกสดเรียลไทม์ (อัปเดตผลทันทีหลังจบเกม) จาก ESPN & Sky Sports"""
-    # 1. ดึงจาก ESPN Live Feed (อัปเดตคะแนนสดทันทีแบบเรียลไทม์)
+    """ดึงตารางคะแนนพรีเมียร์ลีกสดเรียลไทม์ จาก ESPN & Sky Sports"""
     try:
         url_espn = "https://www.espn.com/soccer/standings/_/league/eng.1"
         tables = pd.read_html(url_espn, storage_options={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
@@ -620,14 +605,13 @@ def fetch_skysports_standings():
     except Exception:
         pass
 
-    # 2. สำรอง: ดึงจาก Sky Sports Table
     url_sky = "https://www.skysports.com/premier-league-table"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9'
     }
     try:
-        r = requests.get(url_sky, headers=headers, timeout=8)
+        r = requests.get(url_sky, headers=headers, timeout=(4, 8))
         if r.status_code == 200:
             tables = pd.read_html(io.StringIO(r.text))
             if tables:
@@ -646,8 +630,7 @@ def fetch_skysports_standings():
 # 5. ระบบดึงและสร้างโปรแกรมการแข่งขันพรีเมียร์ลีกครบทั้งฤดูกาล (38 MATCHWEEKS)
 # ==============================================================================
 def convert_to_thai_datetime(date_str, time_str):
-    """แปลงวันและเวลาแข่ง UK (e.g. 'Monday 24 August', '8.00pm' หรือ '20:00') เป็นวันและเวลาไทย (+6 ชม. BST)
-       โดยถ้าข้ามเที่ยงคืน (เช่น เตะ 20:00 UK -> 02:00 น. ไทย) จะปรับวันเป็นวันถัดไปให้อัตโนมัติ"""
+    """แปลงวันและเวลาแข่ง UK เป็นวันและเวลาไทย (+6 ชม. BST)"""
     try:
         clean_date = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', date_str.strip())
         current_year = datetime.now().year
@@ -672,7 +655,6 @@ def convert_to_thai_datetime(date_str, time_str):
         if not dt:
             return clean_date, f"{t_obj.strftime('%H:%M')} น."
             
-        # BST (UTC+1) to Thai Time (UTC+7) = +6 Hours
         thai_dt = dt + timedelta(hours=6)
         thai_date_str = thai_dt.strftime(f'%A {thai_dt.day} %B')
         thai_time_str = f"{thai_dt.strftime('%H:%M')} น."
@@ -681,7 +663,7 @@ def convert_to_thai_datetime(date_str, time_str):
         clean_fallback = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', str(date_str).strip())
         return clean_fallback, (f"{time_str} น." if time_str else "")
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def fetch_skysports_fixtures():
     """ดึงโปรแกรมการแข่งขันและผลบอลพรีเมียร์ลีกตรงเวลาไทยจาก GoalDaddy Live API พร้อมระบบ Fallback ตารางตรง 100%"""
     tz_thai = timezone(timedelta(hours=7))
@@ -697,7 +679,7 @@ def fetch_skysports_fixtures():
 
     fixtures_list = []
 
-    # 1. ดึงข้อมูลสดแบบ Real-Time จาก GoalDaddy API (ผลการแข่งและเวลาเตะจริง)
+    # 1. ดึงข้อมูลสดจาก GoalDaddy API
     try:
         base_url = "https://api.dball-live888.com"
         headers = {
@@ -707,19 +689,17 @@ def fetch_skysports_fixtures():
             "Accept-Language": "th",
             "Content-Type": "application/json"
         }
-        r = requests.post(f"{base_url}/v3/user/guest/login", headers=headers, json={}, timeout=4)
+        r = requests.post(f"{base_url}/v3/user/guest/login", headers=headers, json={}, timeout=(3, 5))
         if r.status_code == 200:
             token = r.json().get('data', {}).get('token')
             auth_headers = dict(headers)
             if token:
                 auth_headers['Authorization'] = f"Bearer {token}"
 
-            # ดึงผลการแข่งขันที่แข่งจบแล้ว (Results)
-            res_r = requests.get(f"{base_url}/v1/league/result", headers=auth_headers, params={"leagueId": 31, "pageNumber": 1, "rowCount": 100}, timeout=4)
+            res_r = requests.get(f"{base_url}/v1/league/result", headers=auth_headers, params={"leagueId": 31, "pageNumber": 1, "rowCount": 100}, timeout=(3, 6))
             played_count = 0
             if res_r.status_code == 200:
                 res_matches = (res_r.json().get('data') or {}).get('leagueMatchResult', {}).get('matches', [])
-                # กรองเฉพาะนัดในฤดูกาลปัจจุบัน (เริ่ม ส.ค. 2569 / Timestamp >= 1785517200000)
                 played_matches = [m for m in res_matches if m.get('homeTeamScore') is not None and m.get('matchStartTime', 0) >= 1785517200000]
                 played_matches.sort(key=lambda x: x.get('matchStartTime', 0))
                 played_count = len(played_matches)
@@ -741,8 +721,7 @@ def fetch_skysports_fixtures():
                         "IsFinished": True
                     })
 
-            # ดึงโปรแกรมการแข่งขันคู่ถัดไป (Fixtures)
-            res_f = requests.get(f"{base_url}/v1/league/fixture", headers=auth_headers, params={"leagueId": 31, "pageNumber": 1, "rowCount": 100}, timeout=4)
+            res_f = requests.get(f"{base_url}/v1/league/fixture", headers=auth_headers, params={"leagueId": 31, "pageNumber": 1, "rowCount": 100}, timeout=(3, 6))
             if res_f.status_code == 200:
                 fix_matches = (res_f.json().get('data') or {}).get('leagueFixtureMatch', {}).get('matches', [])
                 fix_matches.sort(key=lambda x: x.get('matchStartTime', 0))
@@ -765,13 +744,11 @@ def fetch_skysports_fixtures():
     except Exception:
         pass
 
-    # 2. ถ้าดึงสดสำเร็จและได้ข้อมูลอย่างน้อย 10 นัด ให้ส่งคืนข้อมูลได้เลย
     if len(fixtures_list) >= 10:
         return fixtures_list
 
-    # 3. Fallback Dataset ตารางและเวลาเตะตรงตาม GoalDaddy ทุกคู่ (กรณีออฟไลน์หรือเน็ตสะดุด)
+    # 3. Fallback Dataset
     fallback_fixtures = [
-        # Matchweek 1 (ผลการแข่งขันที่มีค้างไว้)
         {"MW": "Matchweek 1", "Date": "วันเสาร์ 22 ส.ค. 2569", "Home": "Arsenal", "Status": "⚽ 3 - 0 (FT)", "Away": "Coventry City", "IsFinished": True},
         {"MW": "Matchweek 1", "Date": "วันเสาร์ 22 ส.ค. 2569", "Home": "Hull City", "Status": "⚽ 2 - 0 (FT)", "Away": "Manchester United", "IsFinished": True},
         {"MW": "Matchweek 1", "Date": "วันเสาร์ 22 ส.ค. 2569", "Home": "Ipswich Town", "Status": "⚽ 2 - 1 (FT)", "Away": "Sunderland", "IsFinished": True},
@@ -783,7 +760,6 @@ def fetch_skysports_fixtures():
         {"MW": "Matchweek 1", "Date": "วันอาทิตย์ 23 ส.ค. 2569", "Home": "Newcastle United", "Status": "⚽ 2 - 2 (FT)", "Away": "Liverpool", "IsFinished": True},
         {"MW": "Matchweek 1", "Date": "วันอังคาร 25 ส.ค. 2569", "Home": "Fulham", "Status": "⚽ 2 - 3 (FT)", "Away": "Chelsea", "IsFinished": True},
 
-        # Matchweek 2 (ตาม GoalDaddy ตรงเวลาไทย)
         {"MW": "Matchweek 2", "Date": "วันเสาร์ 29 ส.ค. 2569", "Home": "Crystal Palace", "Status": "⏰ 02:00 น.", "Away": "Manchester City", "IsFinished": False},
         {"MW": "Matchweek 2", "Date": "วันเสาร์ 29 ส.ค. 2569", "Home": "Liverpool", "Status": "⏰ 18:30 น.", "Away": "Nottingham Forest", "IsFinished": False},
         {"MW": "Matchweek 2", "Date": "วันเสาร์ 29 ส.ค. 2569", "Home": "AFC Bournemouth", "Status": "⏰ 21:00 น.", "Away": "Everton", "IsFinished": False},
@@ -795,7 +771,6 @@ def fetch_skysports_fixtures():
         {"MW": "Matchweek 2", "Date": "วันอาทิตย์ 30 ส.ค. 2569", "Home": "Manchester United", "Status": "⏰ 22:30 น.", "Away": "Ipswich Town", "IsFinished": False},
         {"MW": "Matchweek 2", "Date": "วันอังคาร 1 ก.ย. 2569", "Home": "Aston Villa", "Status": "⏰ 02:00 น.", "Away": "Arsenal", "IsFinished": False},
 
-        # Matchweek 3 (ตาม GoalDaddy ตรงเวลาไทย)
         {"MW": "Matchweek 3", "Date": "วันเสาร์ 5 ก.ย. 2569", "Home": "Ipswich Town", "Status": "⏰ 02:00 น.", "Away": "Liverpool", "IsFinished": False},
         {"MW": "Matchweek 3", "Date": "วันเสาร์ 5 ก.ย. 2569", "Home": "Newcastle United", "Status": "⏰ 18:30 น.", "Away": "AFC Bournemouth", "IsFinished": False},
         {"MW": "Matchweek 3", "Date": "วันเสาร์ 5 ก.ย. 2569", "Home": "Fulham", "Status": "⏰ 21:00 น.", "Away": "Crystal Palace", "IsFinished": False},
@@ -807,7 +782,6 @@ def fetch_skysports_fixtures():
         {"MW": "Matchweek 3", "Date": "วันอาทิตย์ 6 ก.ย. 2569", "Home": "Everton", "Status": "⏰ 20:00 น.", "Away": "Manchester United", "IsFinished": False},
         {"MW": "Matchweek 3", "Date": "วันอาทิตย์ 6 ก.ย. 2569", "Home": "Arsenal", "Status": "⏰ 22:30 น.", "Away": "Chelsea", "IsFinished": False},
 
-        # Matchweek 4 (ตาม GoalDaddy ตรงเวลาไทย)
         {"MW": "Matchweek 4", "Date": "วันเสาร์ 12 ก.ย. 2569", "Home": "Aston Villa", "Status": "⏰ 21:00 น.", "Away": "Nottingham Forest", "IsFinished": False},
         {"MW": "Matchweek 4", "Date": "วันเสาร์ 12 ก.ย. 2569", "Home": "Crystal Palace", "Status": "⏰ 21:00 น.", "Away": "Ipswich Town", "IsFinished": False},
         {"MW": "Matchweek 4", "Date": "วันเสาร์ 12 ก.ย. 2569", "Home": "Liverpool", "Status": "⏰ 21:00 น.", "Away": "Fulham", "IsFinished": False},
@@ -819,7 +793,6 @@ def fetch_skysports_fixtures():
         {"MW": "Matchweek 4", "Date": "วันอาทิตย์ 13 ก.ย. 2569", "Home": "Manchester United", "Status": "⏰ 22:30 น.", "Away": "Manchester City", "IsFinished": False},
         {"MW": "Matchweek 4", "Date": "วันอังคาร 15 ก.ย. 2569", "Home": "Leeds United", "Status": "⏰ 02:00 น.", "Away": "Newcastle United", "IsFinished": False},
 
-        # Matchweek 5 (ตาม GoalDaddy ตรงเวลาไทย)
         {"MW": "Matchweek 5", "Date": "วันเสาร์ 19 ก.ย. 2569", "Home": "Brentford", "Status": "⏰ 02:00 น.", "Away": "Chelsea", "IsFinished": False},
         {"MW": "Matchweek 5", "Date": "วันเสาร์ 19 ก.ย. 2569", "Home": "Tottenham Hotspur", "Status": "⏰ 18:30 น.", "Away": "Aston Villa", "IsFinished": False},
         {"MW": "Matchweek 5", "Date": "วันเสาร์ 19 ก.ย. 2569", "Home": "Brighton and Hove Albion", "Status": "⏰ 21:00 น.", "Away": "Arsenal", "IsFinished": False},

@@ -1,0 +1,82 @@
+# Rule: Streamlit & Data Scraper Development
+
+This rule defines mandatory technical standards and behavioral constraints when building Streamlit applications, data pipelines, web scrapers (financial data, gold/stock prices), and YouTube transcript extractors.
+
+---
+
+## 1. Zero-Tolerance for Stubs & Placeholders
+- **No Incomplete Code**: Never emit `# TODO`, `# Implement later`, `pass`, or mock dummy responses unless explicitly requested by the user.
+- **Full Implementation**: All functions, parsing logic, error fallbacks, and UI components must be fully written, typed, and executable.
+
+---
+
+## 2. Streamlit Architecture & State Management
+
+### 2.1 Configuration & Layout
+- Always configure the page layout at the top of the entry point:
+  ```python
+  st.set_page_config(
+      page_title="App Title",
+      page_icon="📈",
+      layout="wide",
+      initial_sidebar_state="expanded"
+  )
+  ```
+- Modularize multi-page applications using `st.navigation` or the `pages/` directory structure.
+
+### 2.2 Session State Discipline
+- Initialize all `st.session_state` keys with default values before referencing them:
+  ```python
+  if "data_df" not in st.session_state:
+      st.session_state.data_df = None
+  ```
+- Avoid triggering unnecessary re-runs; encapsulate callback mutations inside dedicated callback functions.
+
+### 2.3 Caching Strategy
+- Use `@st.cache_data` for pure data fetching, scraping, API calls, parsing, and dataframe transformations (specify `ttl` where data refreshes periodically):
+  ```python
+  @st.cache_data(ttl=300, show_spinner=False)
+  def fetch_market_data(symbol: str) -> pd.DataFrame:
+      ...
+  ```
+- Use `@st.cache_resource` for heavy singleton objects, such as ML models, database connection pools, or persistent background scrapers.
+
+---
+
+## 3. Web Scraping & Data Pipeline Robustness
+
+### 3.1 Defensive HTTP & Scraping
+- **Headers & User-Agents**: Always pass realistic browser headers (`User-Agent`, `Accept-Language: th,en-US;q=0.9,en;q=0.8`, `Referer`) to avoid bot blocks.
+- **Timeouts & Retries**: Every network request must specify explicit `timeout=(5, 20)` and use retry mechanisms (e.g., `urllib3.util.Retry` with backoff factor) for transient errors (429, 500, 502, 503, 504).
+- **Graceful DOM Parsing**: Validate element existence before extracting attributes or text. Fallback cleanly when CSS selectors or XPath change.
+- **YouTube Transcripts**: Handle multi-language transcripts (`th`, `en`), auto-generated captions, and disabled caption scenarios with explicit try-except fallback.
+
+### 3.2 Thai Encoding & Localization Standards
+- **File Export & Import**: Always save Thai text CSV files with `utf-8-sig` (UTF-8 with BOM) encoding to ensure flawless display in Microsoft Excel and Windows environments:
+  ```python
+  df.to_csv("output.csv", index=False, encoding="utf-8-sig")
+  ```
+- **String Handling**: Preserve Thai diacritics and tone marks during regex cleanups. Normalize Unicode strings using `unicodedata.normalize("NFC", text)`.
+
+---
+
+## 4. Defensive UI & Error Handling
+
+- **No Raw Tracebacks**: Never expose unhandled raw tracebacks or generic crashes in the UI. Wrap execution in try-except blocks and present clean, actionable user feedback:
+  ```python
+  try:
+      with st.spinner("Fetching latest live data..."):
+          data = fetch_market_data(symbol)
+  except ScrapingError as e:
+      st.error(f"⚠️ Failed to retrieve data for {symbol}: {e.user_message}")
+      st.info("💡 Suggestion: Verify your network connection or try a different source.")
+      return
+  ```
+- **Visual Feedback**: Provide immediate feedback during long operations using `st.spinner()`, `st.status()`, or `st.progress()`.
+- **Empty States**: If no data is returned or a query is empty, render informative empty-state messages (`st.warning("No records found for the selected criteria.")`) rather than empty charts or unhandled index errors.
+
+---
+
+## 5. Visual Excellence & Data Presentation
+- Display financial and tabular data using configured `st.dataframe` with proper column formatting (currencies, dates, percentages).
+- Use Plotly (`st.plotly_chart(fig, use_container_width=True)`) for dynamic, interactive time-series charts with hover tooltips and responsive styling.

@@ -3,11 +3,12 @@ import requests
 import json
 import re
 import urllib.parse
+import unicodedata
 from datetime import datetime
 
 # Headers จำลอง Browser สำหรับ YouTube Search Scraper (Zero-API-Key)
 YOUTUBE_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
 }
@@ -38,7 +39,7 @@ def parse_relative_time_to_minutes(text: str) -> float:
     """
     if not text:
         return 999999999.0
-    text_clean = text.lower().replace(',', '').strip()
+    text_clean = str(text).lower().replace(',', '').strip()
 
     # หากเป็น Live สด ให้ความสำคัญสูงสุด (0 นาที)
     if any(k in text_clean for k in ['สด', 'live', 'กำลังสตรีม', 'premiering']):
@@ -66,7 +67,7 @@ def parse_relative_time_to_minutes(text: str) -> float:
 
 
 def _extract_video_renderer_data(vr: dict) -> dict:
-    """สกัดข้อมูลจาก videoRenderer object ของ YouTube"""
+    """สกัดข้อมูลจาก videoRenderer object ของ YouTube อย่างปลอดภัย"""
     try:
         video_id = vr.get('videoId')
         if not video_id:
@@ -106,7 +107,6 @@ def _extract_video_renderer_data(vr: dict) -> dict:
         elif 'runs' in dur_obj and dur_obj['runs']:
             duration = "".join([r.get('text', '') for r in dur_obj['runs']])
         else:
-            # ตรวจสอบว่าเป็น Live สด หรือไม่
             badges = vr.get('badges', [])
             is_live = False
             for b in badges:
@@ -135,14 +135,14 @@ def _extract_video_renderer_data(vr: dict) -> dict:
             description = ""
 
         return {
-            "id": video_id,
-            "title": title.strip(),
-            "channel": channel.strip(),
-            "views": views.strip(),
-            "published": published.strip(),
-            "duration": duration.strip(),
-            "thumbnail": thumbnail,
-            "description": description.strip(),
+            "id": str(video_id).strip(),
+            "title": unicodedata.normalize("NFC", str(title).strip()),
+            "channel": unicodedata.normalize("NFC", str(channel).strip()),
+            "views": str(views).strip(),
+            "published": str(published).strip(),
+            "duration": str(duration).strip(),
+            "thumbnail": str(thumbnail).strip(),
+            "description": unicodedata.normalize("NFC", str(description).strip()),
             "url": f"https://www.youtube.com/watch?v={video_id}",
             "time_minutes": parse_relative_time_to_minutes(published)
         }
@@ -154,8 +154,8 @@ def _extract_video_renderer_data(vr: dict) -> dict:
 def fetch_youtube_search_results(query: str, sort_by: str = "upload_date", max_results: int = 30) -> list:
     """
     ค้นหาคลิปวิดีโอจาก YouTube Search โดยตรง (Zero-API-Key Mode)
-    รองรับการดึงผลลัพธ์จำนวนมาก (10, 20, 30, 50, 100, 150, 200, 300 คลิป) ผ่าน Multi-page Pagination
-    พร้อมจัดเรียงตามลำดับเวลาล่าสุด (Newest First)
+    รองรับการดึงผลลัพธ์จำนวนมาก (10-300 คลิป) ผ่าน Multi-page Pagination
+    พร้อมจัดเรียงตามลำดับเวลาล่าสุด (Newest First) และแคชข้อมูล 3 นาที
     """
     if not query or not query.strip():
         return []
@@ -171,93 +171,87 @@ def fetch_youtube_search_results(query: str, sort_by: str = "upload_date", max_r
     continuation_token = None
 
     try:
-        resp = requests.get(url, headers=YOUTUBE_HEADERS, timeout=12)
-        if resp.status_code != 200:
-            return []
+        resp = requests.get(url, headers=YOUTUBE_HEADERS, timeout=(5, 12))
+        if resp.status_code == 200:
+            match = re.search(r'var ytInitialData\s*=\s*({.+?});</script>', resp.text)
+            if not match:
+                match = re.search(r'ytInitialData\s*=\s*({.+?});', resp.text)
 
-        match = re.search(r'var ytInitialData\s*=\s*({.+?});</script>', resp.text)
-        if not match:
-            match = re.search(r'ytInitialData\s*=\s*({.+?});', resp.text)
+            if match:
+                data = json.loads(match.group(1))
 
-        if not match:
-            return []
+                sections = data.get('contents', {}).get('twoColumnSearchResultsRenderer', {}).get('primaryContents', {}).get('sectionListRenderer', {}).get('contents', [])
 
-        data = json.loads(match.group(1))
+                for sec in sections:
+                    item_sec = sec.get('itemSectionRenderer', {})
+                    items = item_sec.get('contents', [])
+                    for it in items:
+                        if 'videoRenderer' in it:
+                            parsed = _extract_video_renderer_data(it['videoRenderer'])
+                            if parsed and parsed['id'] not in seen_ids:
+                                seen_ids.add(parsed['id'])
+                                results.append(parsed)
 
-        # ดึง sections จาก twoColumnSearchResultsRenderer
-        sections = data.get('contents', {}).get('twoColumnSearchResultsRenderer', {}).get('primaryContents', {}).get('sectionListRenderer', {}).get('contents', [])
+                    if 'continuationItemRenderer' in sec:
+                        endpoint = sec['continuationItemRenderer'].get('continuationEndpoint', {})
+                        continuation_token = endpoint.get('continuationCommand', {}).get('token')
 
-        for sec in sections:
-            # 1. สกัด itemSectionRenderer
-            item_sec = sec.get('itemSectionRenderer', {})
-            items = item_sec.get('contents', [])
-            for it in items:
-                if 'videoRenderer' in it:
-                    parsed = _extract_video_renderer_data(it['videoRenderer'])
-                    if parsed and parsed['id'] not in seen_ids:
-                        seen_ids.add(parsed['id'])
-                        results.append(parsed)
+                if not continuation_token and len(sections) > 0 and 'continuationItemRenderer' in sections[-1]:
+                    endpoint = sections[-1]['continuationItemRenderer'].get('continuationEndpoint', {})
+                    continuation_token = endpoint.get('continuationCommand', {}).get('token')
 
-            # 2. ตรวจสอบ continuation token
-            if 'continuationItemRenderer' in sec:
-                endpoint = sec['continuationItemRenderer'].get('continuationEndpoint', {})
-                continuation_token = endpoint.get('continuationCommand', {}).get('token')
+                # Pagination
+                max_loop_steps = min(25, (max_results // 12) + 4)
+                loop_step = 0
 
-        # ตรวจสอบ continuation ในส่วนท้ายของ sections
-        if not continuation_token and len(sections) > 0 and 'continuationItemRenderer' in sections[-1]:
-            endpoint = sections[-1]['continuationItemRenderer'].get('continuationEndpoint', {})
-            continuation_token = endpoint.get('continuationCommand', {}).get('token')
-
-        # 3. Pagination ต่อเนื่องเพื่อดึงให้ครบตามจำนวน max_results (รองรับ 50, 100, 150, 200, 300)
-        max_loop_steps = min(25, (max_results // 12) + 4)
-        loop_step = 0
-
-        while len(results) < max_results and continuation_token and loop_step < max_loop_steps:
-            loop_step += 1
-            payload = {
-                'context': {
-                    'client': {
-                        'clientName': 'WEB',
-                        'clientVersion': '2.20240101.00.00',
-                        'hl': 'th',
-                        'gl': 'TH'
+                while len(results) < max_results and continuation_token and loop_step < max_loop_steps:
+                    loop_step += 1
+                    payload = {
+                        'context': {
+                            'client': {
+                                'clientName': 'WEB',
+                                'clientVersion': '2.20240101.00.00',
+                                'hl': 'th',
+                                'gl': 'TH'
+                            }
+                        },
+                        'continuation': continuation_token
                     }
-                },
-                'continuation': continuation_token
-            }
-            c_resp = requests.post(
-                'https://www.youtube.com/youtubei/v1/search',
-                json=payload,
-                headers={'Content-Type': 'application/json', 'User-Agent': YOUTUBE_HEADERS['User-Agent']},
-                timeout=10
-            )
-            continuation_token = None
-            if c_resp.status_code == 200:
-                c_data = c_resp.json()
-                actions = c_data.get('onResponseReceivedCommands', [])
-                added_this_round = 0
-                for act in actions:
-                    app_items = act.get('appendContinuationItemsAction', {}).get('continuationItems', [])
-                    for ai in app_items:
-                        if 'itemSectionRenderer' in ai:
-                            for it in ai['itemSectionRenderer'].get('contents', []):
-                                if 'videoRenderer' in it:
-                                    parsed = _extract_video_renderer_data(it['videoRenderer'])
-                                    if parsed and parsed['id'] not in seen_ids:
-                                        seen_ids.add(parsed['id'])
-                                        results.append(parsed)
-                                        added_this_round += 1
-                        if 'continuationItemRenderer' in ai:
-                            endpoint = ai['continuationItemRenderer'].get('continuationEndpoint', {})
-                            continuation_token = endpoint.get('continuationCommand', {}).get('token')
-                if added_this_round == 0:
-                    break
-            else:
-                break
-    except Exception as e:
-        print(f"Error fetching YouTube search results: {e}")
+                    try:
+                        c_resp = requests.post(
+                            'https://www.youtube.com/youtubei/v1/search',
+                            json=payload,
+                            headers={'Content-Type': 'application/json', 'User-Agent': YOUTUBE_HEADERS['User-Agent']},
+                            timeout=(4, 10)
+                        )
+                        continuation_token = None
+                        if c_resp.status_code == 200:
+                            c_data = c_resp.json()
+                            actions = c_data.get('onResponseReceivedCommands', [])
+                            added_this_round = 0
+                            for act in actions:
+                                app_items = act.get('appendContinuationItemsAction', {}).get('continuationItems', [])
+                                for ai in app_items:
+                                    if 'itemSectionRenderer' in ai:
+                                        for it in ai['itemSectionRenderer'].get('contents', []):
+                                            if 'videoRenderer' in it:
+                                                parsed = _extract_video_renderer_data(it['videoRenderer'])
+                                                if parsed and parsed['id'] not in seen_ids:
+                                                    seen_ids.add(parsed['id'])
+                                                    results.append(parsed)
+                                                    added_this_round += 1
+                                    if 'continuationItemRenderer' in ai:
+                                        endpoint = ai['continuationItemRenderer'].get('continuationEndpoint', {})
+                                        continuation_token = endpoint.get('continuationCommand', {}).get('token')
+                            if added_this_round == 0:
+                                break
+                        else:
+                            break
+                    except Exception:
+                        break
+    except Exception:
+        pass
 
-    # หากเลือกเรียงตามวันที่อัปโหลดล่าสุด (Upload Date) ให้เรียงตามเวลา Newest First
     if sort_by == "upload_date" and results:
         results = sorted(results, key=lambda x: x.get("time_minutes", 999999999.0))
 
@@ -284,30 +278,29 @@ def add_to_favorites(video: dict):
     """เพิ่มคลิปลงในรายการโปรด"""
     if "yt_search_favorites" not in st.session_state:
         st.session_state["yt_search_favorites"] = []
-    if not any(f["id"] == video["id"] for f in st.session_state["yt_search_favorites"]):
+    if not any(f.get("id") == video.get("id") for f in st.session_state["yt_search_favorites"]):
         st.session_state["yt_search_favorites"].append(video)
-        st.toast(f"⭐ บันทึก '{video['title'][:30]}...' ลงในรายการโปรดแล้ว", icon="✅")
+        st.toast(f"⭐ บันทึก '{video.get('title', '')[:30]}...' ลงในรายการโปรดแล้ว", icon="✅")
 
 
 def remove_from_favorites(video_id: str):
     """ลบคลิปออกจากรายการโปรด"""
     if "yt_search_favorites" in st.session_state:
         st.session_state["yt_search_favorites"] = [
-            f for f in st.session_state["yt_search_favorites"] if f["id"] != video_id
+            f for f in st.session_state["yt_search_favorites"] if f.get("id") != video_id
         ]
         st.toast("🗑️ ลบออกจากรายการโปรดแล้ว", icon="ℹ️")
 
 
 def is_in_favorites(video_id: str) -> bool:
     """ตรวจสอบว่าคลิปอยู่ในรายการโปรดหรือไม่"""
-    return any(f["id"] == video_id for f in st.session_state.get("yt_search_favorites", []))
+    return any(f.get("id") == video_id for f in st.session_state.get("yt_search_favorites", []))
 
 
 def render_youtube_search_page():
-    """หน้าหลัก YouTube Search Hub (เมนูที่ 9)"""
+    """หน้าหลัก YouTube Search Hub"""
     _init_session_states()
 
-    # CSS สำหรับ YouTube Cards, Theater Player, และ Badges
     st.markdown("""
         <style>
         .yt-header-banner {
@@ -362,7 +355,7 @@ def render_youtube_search_page():
         .yt-thumb-box {
             position: relative;
             width: 100%;
-            padding-top: 56.25%; /* 16:9 Aspect Ratio */
+            padding-top: 56.25%;
             background-color: #0f172a;
             overflow: hidden;
         }
@@ -482,7 +475,6 @@ def render_youtube_search_page():
     # TAB 1: ค้นหาวิดีโอ (Search Videos)
     # ==========================================
     with tab1:
-        # Search & Filter Controls
         with st.container():
             col_search, col_sort, col_limit, col_btn = st.columns([3.3, 1.8, 1.3, 1.1])
             
@@ -542,7 +534,7 @@ def render_youtube_search_page():
             st.rerun()
 
         # ==========================================
-        # THEATER VIEW PLAYER (กล่องโรงภาพยนตร์)
+        # THEATER VIEW PLAYER
         # ==========================================
         theater_video = st.session_state.get("yt_theater_video")
         if theater_video:
@@ -598,17 +590,21 @@ def render_youtube_search_page():
             st.markdown("<hr style='margin: 18px 0; border-color: #e2e8f0;'>", unsafe_allow_html=True)
 
         # ==========================================
-        # ดึงและแสดงผลการค้นหา (Search Results)
+        # แสดงผลการค้นหา
         # ==========================================
         active_query = st.session_state.get("yt_search_query", "ข่าวไอที เทคโนโลยี ล่าสุด")
         active_sort = st.session_state.get("yt_search_sort", "upload_date")
         active_limit = st.session_state.get("yt_search_limit", 30)
 
         with st.spinner(f"⚡ กำลังดึง {active_limit} คลิปบน YouTube สำหรับ '{active_query}'..."):
-            videos = fetch_youtube_search_results(active_query, sort_by=active_sort, max_results=active_limit)
+            try:
+                videos = fetch_youtube_search_results(active_query, sort_by=active_sort, max_results=active_limit)
+            except Exception as e:
+                st.warning(f"⚠️ เกิดข้อผิดพลาดในการค้นหา: {str(e)}")
+                videos = []
 
         if not videos:
-            st.warning(f"⚠️ ไม่พบผลลัพธ์วิดีโอสำหรับคำค้นหา '{active_query}' กรุณาลองใช้คำค้นหาอื่น")
+            st.warning(f"⚠️ ไม่พบผลลัพธ์วิดีโอสำหรับคำค้นหา '{active_query}' หรือการเชื่อมต่อมีปัญหา กรุณาลองใช้คำค้นหาอื่น")
         else:
             sort_text = "🕒 จัดเรียง: อัปโหลดล่าสุด (ใหม่สุดไล่ลงไป)" if active_sort == "upload_date" else f"จัดเรียง: {active_sort}"
             st.markdown(f"""
@@ -620,7 +616,6 @@ def render_youtube_search_page():
                 </div>
             """, unsafe_allow_html=True)
 
-            # Dropdown เล่นด่วน
             quick_options = ["-- เลือกคลิปที่ต้องการสั่งเล่นทันที --"] + [
                 f"[{v['published']} | {v['duration']}] {v['title'][:55]}... ({v['channel']})" for v in videos
             ]
@@ -638,7 +633,6 @@ def render_youtube_search_page():
 
             st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
 
-            # แสดงการ์ดผลลัพธ์เป็น Grid 3 คอลัมน์ (เรียงจากใหม่สุดไปเก่าสุด)
             grid_cols = st.columns(3)
             for idx, vid in enumerate(videos):
                 col = grid_cols[idx % 3]

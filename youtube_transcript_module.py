@@ -4,12 +4,13 @@ import json
 import urllib.parse
 import urllib.request
 import requests
+import unicodedata
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 def extract_video_id(url: str) -> str:
-    """สกัด YouTube Video ID จาก URL รูปแบบต่างๆ (watch, share, shorts, live)"""
+    """สกัด YouTube Video ID จาก URL รูปแบบต่างๆ (watch, share, shorts, live, embed)"""
     if not url:
         return None
     patterns = [
@@ -51,8 +52,8 @@ def get_video_metadata(video_id: str, url: str) -> dict:
             d = json.loads(resp.read().decode('utf-8'))
             return {
                 "id": video_id,
-                "title": d.get("title", f"YouTube Video ({video_id})"),
-                "channel": d.get("author_name", "YouTube Creator"),
+                "title": unicodedata.normalize("NFC", d.get("title", f"YouTube Video ({video_id})")),
+                "channel": unicodedata.normalize("NFC", d.get("author_name", "YouTube Creator")),
                 "thumbnail": d.get("thumbnail_url", f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"),
                 "url": url,
                 "duration": 0
@@ -87,12 +88,12 @@ def translate_to_thai(text: str) -> str:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
         }
-        r = requests.get(url, headers=headers, timeout=8)
+        r = requests.get(url, headers=headers, timeout=(4, 8))
         if r.status_code == 200:
             soup = BeautifulSoup(r.text, 'html.parser')
             res = soup.find('div', class_='result-container')
             if res and res.text:
-                return res.text.strip()
+                return unicodedata.normalize("NFC", res.text.strip())
     except Exception:
         pass
     return text
@@ -117,15 +118,16 @@ def translate_paragraphs_to_thai(paragraphs, max_workers: int = 12):
 def fetch_youtube_data_and_transcript(url: str, preferred_languages=('th', 'en')):
     """
     ดึงข้อมูล Metadata และสคริปต์คำบรรยาย (Transcript) โดยตรง (Zero-API-Key Mode)
+    พร้อม Caching 10 นาที และระบบ Defensive Multi-Language Fallback
     """
     video_id = extract_video_id(url)
     if not video_id:
-        raise Exception("ไม่พบ YouTube Video ID ใน URL ที่ระบุ")
+        raise Exception("ไม่พบ YouTube Video ID ใน URL ที่ระบุ กรุณาตรวจสอบลิงก์อีกครั้ง")
 
     # 1. ดึง Metadata วิดีโอ
     video_info = get_video_metadata(video_id, url)
 
-    # 2. ดึงสคริปต์ Transcript ผ่าน YouTubeTranscriptApi (Fast & Reliable)
+    # 2. ดึงสคริปต์ Transcript ผ่าน YouTubeTranscriptApi
     segments = []
     selected_lang = None
 
@@ -139,17 +141,17 @@ def fetch_youtube_data_and_transcript(url: str, preferred_languages=('th', 'en')
         for t in t_list:
             if 'th' in t.language_code.lower():
                 f = t.fetch()
-                segments = [{'start': s.start, 'duration': s.duration, 'text': s.text.replace('\n', ' ').strip()} for s in f if s.text.strip()]
+                segments = [{'start': s.start, 'duration': s.duration, 'text': unicodedata.normalize("NFC", s.text.replace('\n', ' ').strip())} for s in f if s.text.strip()]
                 selected_lang = f"{t.language} ({t.language_code})"
                 break
 
-        # ถ้าไม่มีภาษาไทย ให้หาตามภาษาที่ต้องการ (เช่น English)
+        # ถ้าไม่มีภาษาไทย ให้หาตามภาษาที่ต้องการ
         if not segments:
             for lang_code in preferred_languages:
                 for t in t_list:
                     if t.language_code.lower().startswith(lang_code.lower()):
                         f = t.fetch()
-                        segments = [{'start': s.start, 'duration': s.duration, 'text': s.text.replace('\n', ' ').strip()} for s in f if s.text.strip()]
+                        segments = [{'start': s.start, 'duration': s.duration, 'text': unicodedata.normalize("NFC", s.text.replace('\n', ' ').strip())} for s in f if s.text.strip()]
                         selected_lang = f"{t.language} ({t.language_code})"
                         break
                 if segments:
@@ -159,12 +161,12 @@ def fetch_youtube_data_and_transcript(url: str, preferred_languages=('th', 'en')
         if not segments:
             for t in t_list:
                 f = t.fetch()
-                segments = [{'start': s.start, 'duration': s.duration, 'text': s.text.replace('\n', ' ').strip()} for s in f if s.text.strip()]
+                segments = [{'start': s.start, 'duration': s.duration, 'text': unicodedata.normalize("NFC", s.text.replace('\n', ' ').strip())} for s in f if s.text.strip()]
                 selected_lang = f"{t.language} ({t.language_code})"
                 break
 
-    except Exception as e:
-        print("YouTubeTranscriptApi list error:", e)
+    except Exception:
+        pass
 
     # Fallback ดึงตรงๆ ถ้า list ล้มเหลว
     if not segments:
@@ -173,7 +175,7 @@ def fetch_youtube_data_and_transcript(url: str, preferred_languages=('th', 'en')
             api = YouTubeTranscriptApi()
             fetched = api.fetch(video_id, languages=list(preferred_languages))
             for s in fetched:
-                txt = s.text.replace('\n', ' ').strip()
+                txt = unicodedata.normalize("NFC", s.text.replace('\n', ' ').strip())
                 if txt:
                     segments.append({
                         'start': s.start,
@@ -182,8 +184,8 @@ def fetch_youtube_data_and_transcript(url: str, preferred_languages=('th', 'en')
                     })
             if segments:
                 selected_lang = "Detected Transcript"
-        except Exception as e2:
-            print("YouTubeTranscriptApi fetch fallback error:", e2)
+        except Exception:
+            pass
 
     # 3. คำนวณความยาวคลิปโดยประมาณจาก segment สุดท้าย
     if segments:
@@ -297,14 +299,13 @@ def build_export_llm_prompt(paragraphs, video_info: dict) -> str:
 
 
 def wrap_utf8_bom(content: str) -> bytes:
-    """ใส่ UTF-8 BOM (\uFEFF) นำหน้า เพื่อการันตีเปิดภาษาไทยได้ถูกต้องบน Windows, Excel และ Text Editors ทุกตัว"""
-    return ("\ufeff" + content).encode("utf-8")
+    """ใส่ UTF-8 BOM (\uFEFF) นำหน้า เพื่อการันตีเปิดภาษาไทยได้ถูกต้อง 100% บน Windows, Excel และ Text Editors ทุกตัว"""
+    return ("\ufeff" + str(content)).encode("utf-8")
 
 
 def render_youtube_transcript_page():
     """หน้าจอหลักสำหรับหัวข้อที่ 7: YouTube Transcript Pro (No API) พร้อมระบบแปลภาษาไทยอัตโนมัติ"""
     
-    # CSS สไตล์เฉพาะของโมดูล Transcript
     st.markdown("""
         <style>
         .yt-extract-banner {
@@ -352,7 +353,6 @@ def render_youtube_transcript_page():
         </div>
     """, unsafe_allow_html=True)
 
-    # Initial Session States
     if 'transcript_url_input' not in st.session_state:
         st.session_state['transcript_url_input'] = ""
     if 'transcript_ready' not in st.session_state:
@@ -360,7 +360,7 @@ def render_youtube_transcript_page():
     if 'transcript_data' not in st.session_state:
         st.session_state['transcript_data'] = None
 
-    # แผงตั้งค่าการถอดความ (Expander Settings)
+    # แผงตั้งค่าการถอดความ
     with st.expander("⚙️ การตั้งค่าขั้นสูง (Speech Gap & Language Priority)", expanded=False):
         c_set1, c_set2 = st.columns(2)
         with c_set1:
@@ -439,19 +439,16 @@ def render_youtube_transcript_page():
                     st.success(f"✅ ดึงสคริปต์สำเร็จ! (ภาษาต้นฉบับ: **{lang_name}** | **{len(orig_paragraphs):,}** ย่อหน้า){trans_note}")
                 except Exception as err:
                     st.session_state['transcript_ready'] = False
-                    st.error(f"❌ {str(err)}")
+                    st.warning(f"⚠️ {str(err)}")
 
     # แสดงผลสคริปต์ที่สกัดได้
     if st.session_state.get('transcript_ready', False) and st.session_state.get('transcript_data'):
         data_bundle = st.session_state['transcript_data']
-        v_info = data_bundle['video_info']
-        orig_paras = data_bundle['orig_paragraphs']
-        thai_paras = data_bundle['thai_paragraphs']
-        lang_name = data_bundle['lang_name']
-        is_trans = data_bundle.get('is_translated', False)
-        has_native_thai = data_bundle.get('has_native_thai', False)
+        v_info = data_bundle.get('video_info', {})
+        orig_paras = data_bundle.get('orig_paragraphs', [])
+        thai_paras = data_bundle.get('thai_paragraphs', [])
+        lang_name = data_bundle.get('lang_name', '')
         
-        # ตรวจสอบเพิ่มเติมกรณีข้อความต้นฉบับไม่ใช่ภาษาไทย แต่ยังไม่ได้แปล
         sample_check = " ".join(p['text'] for p in orig_paras[:10])
         is_foreign = not is_text_thai(sample_check)
 
@@ -484,7 +481,6 @@ def render_youtube_transcript_page():
 
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
-        # แถบสลับภาษาแสดงผล & ดาวน์โหลด (แสดงเสมอเมื่อเป็นคลิปต่างประเทศ)
         if is_foreign:
             selected_view_mode = st.radio(
                 "🌐 เลือกภาษาที่ต้องการแสดงผลและดาวน์โหลด:",
@@ -498,7 +494,6 @@ def render_youtube_transcript_page():
             )
             is_current_thai = "ภาษาไทย" in selected_view_mode
             
-            # หากเลือกภาษาไทย แต่ thai_paras ยังไม่ได้ถูกแปล ให้แปลทันที
             if is_current_thai:
                 if not thai_paras or thai_paras == orig_paras or not is_text_thai(" ".join(p['text'] for p in thai_paras[:5])):
                     with st.spinner("🇹🇭 กำลังแปลสคริปต์เป็นภาษาไทย (Auto-Translating to Thai)..."):
@@ -560,11 +555,10 @@ def render_youtube_transcript_page():
 
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
-        # ช่องค้นหาคำในสคริปต์แบบ Real-time Text Search
+        # Interactive Preview & Search
         st.markdown("#### 👁️ ตัวอย่างเนื้อหาสคริปต์ (Interactive Preview)")
         search_kw = st.text_input("🔍 ค้นหาคำหรือประโยคในสคริปต์:", placeholder="พิมพ์คำที่ต้องการค้นหา เช่น AI, ข่าว, สรุป...")
 
-        # แท็บแสดงผล 4 มุมมอง
         tab_time, tab_clean, tab_prompt, tab_srt = st.tabs([
             "⏱️ สคริปต์พร้อม Timestamp", 
             "📄 ข้อความต่อเนื่อง (Clean Text)", 
