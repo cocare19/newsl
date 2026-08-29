@@ -40,6 +40,19 @@ except Exception:
         def render_youtube_search_page():
             st.error("❌ ไม่พบไฟล์ youtube_search_module.py")
 
+try:
+    from youtube_transcript_module import render_youtube_transcript_page
+except Exception:
+    yt_trans_path = os.path.join(CURRENT_DIR, "youtube_transcript_module.py")
+    if os.path.exists(yt_trans_path):
+        spec = importlib.util.spec_from_file_location("youtube_transcript_module", yt_trans_path)
+        yt_trans_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(yt_trans_mod)
+        render_youtube_transcript_page = yt_trans_mod.render_youtube_transcript_page
+    else:
+        def render_youtube_transcript_page():
+            st.error("❌ ไม่พบไฟล์ youtube_transcript_module.py")
+
 st.set_page_config(page_title="NewsL Lite Matrix", page_icon="⚡", layout="wide")
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
@@ -95,7 +108,8 @@ with st.sidebar:
             "📅 3. Premier League Fixtures",
             "📡 4. Curated RSS Feeds",
             "📺 5. Media & Video Hub",
-            "🔍 6. YouTube Search Hub"
+            "🔍 6. YouTube Search Hub",
+            "🎬 7. YouTube Transcript Pro"
         ]
     )
 
@@ -838,4 +852,8 @@ elif menu_selection == "📺 5. Media & Video Hub":
 
 # --- 6. YOUTUBE SEARCH HUB ---
 elif menu_selection == "🔍 6. YouTube Search Hub":
-    render_youtube_search_page()
+    render_youtube_search_page()
+
+# --- 7. YOUTUBE TRANSCRIPT PRO ---
+elif menu_selection == "🎬 7. YouTube Transcript Pro":
+    render_youtube_transcript_page()
