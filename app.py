@@ -38,7 +38,8 @@ fetch_today_oil_all_brands = data_loader_mod.fetch_today_oil_all_brands
 fetch_macro_indicators = data_loader_mod.fetch_macro_indicators
 fetch_tech_ai_stocks = data_loader_mod.fetch_tech_ai_stocks
 fetch_skysports_standings = data_loader_mod.fetch_skysports_standings
-fetch_skysports_fixtures = data_loader_mod.fetch_skysports_fixtures
+fetch_goal_fixtures = getattr(data_loader_mod, 'fetch_goal_fixtures', data_loader_mod.fetch_skysports_fixtures)
+fetch_skysports_fixtures = fetch_goal_fixtures
 
 render_rss_page = rss_mod.render_rss_page
 render_tech_hub_page = tech_hub_mod.render_tech_hub_page
@@ -749,29 +750,52 @@ elif menu_selection == "🏆 2. Premier League Tables":
 elif menu_selection == "📅 3. Premier League Fixtures":
     try:
         st.markdown("#### 📅 Premier League Fixtures & Live Scores")
-        st.caption("ผลการแข่งขันและตารางถ่ายทอดสดพรีเมียร์ลีก (GoalDaddy Live Feed ตรงตามเวลาไทย BKK)")
+        st.caption("ตารางการแข่งขันและผลบอลสดพรีเมียร์ลีกครบทั้งฤดูกาล (Goal.com Live Feed ตรงตามเวลาไทย BKK)")
 
-        t3_c1, t3_c2 = st.columns([3.5, 8.5])
-        with t3_c1:
-            if st.button("🔄 รีเฟรชผลและตารางสด", key="btn_fixtures_refresh", use_container_width=True):
-                st.cache_data.clear()
-                st.rerun()
-
-        fixtures_raw = fetch_skysports_fixtures()
+        fixtures_raw = fetch_goal_fixtures()
         df_all_fixtures = pd.DataFrame(fixtures_raw)
 
         if not df_all_fixtures.empty:
+            # Check for live matches
+            live_count = len(df_all_fixtures[df_all_fixtures.get('MatchState', '') == 'LIVE']) if 'MatchState' in df_all_fixtures else 0
+            
+            t3_c1, t3_c2 = st.columns([3.5, 8.5])
+            with t3_c1:
+                refresh_label = f"🔄 รีเฟรชผลและตารางสด {'(🔴 กำลังแข่ง ' + str(live_count) + ' คู่)' if live_count > 0 else ''}"
+                if st.button(refresh_label, key="btn_fixtures_refresh", use_container_width=True):
+                    st.cache_data.clear()
+                    st.rerun()
+
             ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([3, 3, 1.4])
             with ctrl_col1:
                 all_mws = list(dict.fromkeys(df_all_fixtures['MW'].tolist()))
                 mw_options = ["🌟 แสดงทุกสัปดาห์ (All Matchweeks)"] + all_mws
-                selected_mw = st.selectbox("📅 เลือกสัปดาห์การแข่งขัน:", mw_options, key="pl_mw_selector")
+                
+                # Auto-detect default matchweek (prefer MW with LIVE or next UPCOMING matches)
+                default_idx = 0
+                active_mw_found = None
+                for _, r in df_all_fixtures.iterrows():
+                    if r.get('MatchState') == 'LIVE':
+                        active_mw_found = r['MW']
+                        break
+                    elif r.get('MatchState') == 'UPCOMING' and active_mw_found is None:
+                        active_mw_found = r['MW']
+
+                if active_mw_found and active_mw_found in mw_options:
+                    default_idx = mw_options.index(active_mw_found)
+
+                selected_mw = st.selectbox(
+                    "📅 เลือกสัปดาห์การแข่งขัน:",
+                    mw_options,
+                    index=default_idx,
+                    key="pl_mw_selector"
+                )
             with ctrl_col2:
                 search_team = st.text_input("🔍 ค้นหาทีมโปรด:", placeholder="พิมพ์ เช่น Arsenal, Man Utd, Liverpool...", key="pl_team_search")
             with ctrl_col3:
                 st.write("")
                 st.write("")
-                st.link_button("🌐 GoalDaddy", "https://www.goaldaddythai.info/leagueDetail/31/%E0%B8%AD%E0%B8%B1%E0%B8%87%E0%B8%81%E0%B8%A4%E0%B8%A9-%E0%B8%9E%E0%B8%A3%E0%B8%B5%E0%B9%80%E0%B8%A1%E0%B8%B5%E0%B8%A2%E0%B8%A3%E0%B9%8C-%E0%B8%A5%E0%B8%B5%E0%B8%81", use_container_width=True)
+                st.link_button("🌐 Goal.com", "https://www.goal.com/th/premier-league/%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%87%E0%B9%81%E0%B8%82%E0%B9%88%E0%B8%87-%E0%B8%9C%E0%B8%A5%E0%B8%81%E0%B8%B2%E0%B8%A3%E0%B9%81%E0%B8%82%E0%B9%88%E0%B8%87%E0%B8%82%E0%B8%B1%E0%B8%99/2kwbbcootiqqgmrzs6o5inle5", use_container_width=True)
 
             st.markdown("---")
             df_filtered = df_all_fixtures.copy()
@@ -790,8 +814,11 @@ elif menu_selection == "📅 3. Premier League Fixtures":
                     a_badge = f"<img src='{row['AwayBadge']}' style='width:22px;height:22px;vertical-align:middle;margin-right:6px;object-fit:contain;' onerror=\"this.style.display='none'\">" if row.get('AwayBadge') else ""
                     
                     status_val = str(row.get('Status', ''))
+                    m_state = str(row.get('MatchState', ''))
                     
-                    if "⚽" in status_val or "(FT)" in status_val:
+                    if m_state == "LIVE" or "🔴" in status_val:
+                        status_badge = f"<span class='pl-badge-live'>{status_val}</span>"
+                    elif m_state == "FINISHED" or "⚽" in status_val or "(FT)" in status_val:
                         status_badge = f"<span class='pl-badge-finished'>{status_val}</span>"
                     elif "⏰" in status_val:
                         status_badge = f"<span class='pl-badge-upcoming'>{status_val}</span>"

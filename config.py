@@ -287,6 +287,23 @@ CUSTOM_CSS = """
         color: #1E293B;
         font-weight: 600;
     }
+    .pl-badge-live {
+        background: #DC2626;
+        color: #FFFFFF;
+        padding: 5px 12px;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 0.84rem;
+        display: inline-block;
+        white-space: nowrap;
+        box-shadow: 0 0 8px rgba(220, 38, 38, 0.45);
+        animation: plLivePulse 1.8s infinite ease-in-out;
+    }
+    @keyframes plLivePulse {
+        0% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.85; transform: scale(1.02); }
+        100% { opacity: 1; transform: scale(1); }
+    }
     .pl-badge-finished {
         background: #16A34A;
         color: #FFFFFF;
@@ -338,6 +355,7 @@ CUSTOM_CSS = """
         .pl-fixture-mw { color: #60A5FA !important; }
         .pl-fixture-date { color: #94A3B8 !important; }
         .pl-fixture-team { color: #F1F5F9 !important; }
+        .pl-badge-live { background: #EF4444 !important; color: #FFFFFF !important; }
         .pl-badge-upcoming { background: #1E293B !important; color: #F1F5F9 !important; border-color: #374151 !important; }
     }
 </style>
