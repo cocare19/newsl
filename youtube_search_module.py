@@ -13,6 +13,11 @@ YOUTUBE_HEADERS = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
 }
 
+# Cookie ระบุโซนประเทศไทยและภาษาไทยสำหรับ YouTube
+YOUTUBE_COOKIES = {
+    'PREF': 'hl=th&gl=TH'
+}
+
 # พารามิเตอร์การจัดเรียงของ YouTube (sp parameters)
 SORT_SP_MAPPING = {
     "upload_date": "CAISBAgCEAE%3D",   # อัปโหลดล่าสุด (Upload date - Newest first)
@@ -22,14 +27,141 @@ SORT_SP_MAPPING = {
 }
 
 QUICK_TOPICS = [
-    ("⚡ ข่าวไอทีล่าสุด", "ข่าวไอที เทคโนโลยี ล่าสุด"),
-    ("⚽ ไฮไลท์ฟุตบอล", "ไฮไลท์ฟุตบอล ล่าสุด"),
-    ("🤖 AI & Python", "AI Artificial Intelligence Python ล่าสุด"),
-    ("🍿 สปอยล์หนัง", "สปอยล์หนัง หนังใหม่ ล่าสุด"),
-    ("🎶 รวมเพลงเพราะ", "รวมเพลงเพราะ เพลงใหม่"),
-    ("🙏 หลวงตาสุริยา", "หลวงตาสุริยา วัดป่าธรรมอุทยาน ล่าสุด"),
-    ("📈 วิเคราะห์ตลาด & หุ้น", "วิเคราะห์หุ้น ตลาดหุ้น เศรษฐกิจ ล่าสุด")
+    ("⚡ ข่าวไอทีล่าสุด", "ข่าวไอทีล่าสุด"),
+    ("⚽ ไฮไลท์ฟุตบอล", "ไฮไลท์ฟุตบอล"),
+    ("🤖 AI & Python", "AI & Python"),
+    ("🍿 สปอยล์หนัง", "สปอยล์หนัง"),
+    ("🎶 รวมเพลงเพราะ", "รวมเพลงเพราะ"),
+    ("🙏 หลวงตาสุริยา", "หลวงตาสุริยา วัดป่าธรรมอุทยาน"),
+    ("📈 วิเคราะห์ตลาด & หุ้น", "วิเคราะห์หุ้น ตลาดหุ้น")
 ]
+
+
+# Regex สำหรับอักษรที่ไม่ใช่ละตินและไม่ใช่ไทย (เช่น จีน ญี่ปุ่น เกาหลี รัสเซีย อาหรับ ฮินดี ลาว พม่า ฯลฯ)
+NON_LATIN_THAI_REGEX = re.compile(r'[\u4e00-\u9fff\u3400-\u4dbf\u3040-\u30ff\uac00-\ud7af\u0400-\u04ff\u0600-\u06ff\u0900-\u097f\u0e80-\u0eff\u1000-\u109f]')
+
+# เครื่องหมายกำกับเสียงเฉพาะภาษาอื่น (เวียดนาม, ฝรั่งเศส, สเปน, เยอรมัน, โปแลนด์ ฯลฯ ที่ภาษาอังกฤษแทบไม่ใช้)
+FOREIGN_DIACRITICS_REGEX = re.compile(r'[àáâãäåæçèéêëìíîïðñòóôõöøùúûüýÿđơưăảẽỉỏũạẹọụừứờớàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệđìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵßŁłŻżĆćŚśŹźñ¿¡«»]')
+
+# คำเฉพาะ / Stopwords ของภาษาละตินอื่นๆ (ฝรั่งเศส, เวียดนาม, สเปน, โปรตุเกส, อินโดนีเซีย, เยอรมัน, อิตาลี ฯลฯ)
+FOREIGN_STOPWORDS = {
+    # French
+    'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'en', 'ce', 'cette', 'ces', 'dans', 'pour', 'avec', 'sur', 'par', 
+    'qui', 'que', 'quoi', 'dont', 'où', 'est', 'sont', 'fait', 'tout', 'tous', 'toute', 'toutes', 'monde', 'sa', 'son', 'ses', 
+    'leur', 'leurs', 'nous', 'vous', 'ils', 'elles', 'seule', 'seul', 'garçon', 'haït', 'soigner', 'jambe', 'regarder', 'mineurs',
+    'suivre', 'déclaration', 'histoire', 'film', 'complet', 'bande', 'annonce', 'vf', 'vostfr', 'épisode', 'chanson', 'avec',
+    # Vietnamese
+    'của', 'và', 'các', 'có', 'được', 'cho', 'trong', 'với', 'không', 'những', 'người', 'này', 'đã', 'để', 'khi', 'từ', 'vào', 
+    'một', 'nhiều', 'như', 'là', 'tại', 'tự', 'khác', 'biệt', 'đáng', 'kinh', 'ngạc', 'thành', 'phố', 'việt', 'nam', 'hà', 'nội', 
+    'sài', 'gòn', 'tập', 'phim', 'thuyết', 'minh', 'lồng', 'tiếng', 'full', 'trọn', 'bộ', 'hài', 'hước', 'địa', 'lý',
+    # Spanish
+    'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'del', 'al', 'con', 'por', 'para', 'como', 'pero', 'sus', 'este', 'esta',
+    'estos', 'estas', 'partido', 'resumen', 'goles', 'capítulo', 'completo', 'película', 'serie', 'enlace', 'noticias', 'canción',
+    # Portuguese
+    'o', 'a', 'os', 'as', 'um', 'uma', 'do', 'da', 'dos', 'das', 'no', 'na', 'nos', 'nas', 'pelo', 'pela', 'pelos', 'pelas',
+    'para', 'com', 'não', 'mais', 'como', 'mas', 'foi', 'resumo', 'jogo', 'capítulo', 'completo', 'filme', 'música',
+    # Indonesian / Malay
+    'yang', 'di', 'dan', 'itu', 'dengan', 'untuk', 'tidak', 'ini', 'dari', 'dalam', 'akan', 'pada', 'juga', 'saya', 'ke', 'karena',
+    'tersebut', 'bisa', 'ada', 'mereka', 'lebih', 'sudah', 'atau', 'saat', 'oleh', 'telah', 'kita', 'menjadi', 'orang', 'sangat',
+    'cara', 'membuat', 'lagu', 'alur', 'cerita', 'film', 'terbaru', 'lengkap', 'bahasa', 'indonesia',
+    # German & Italian
+    'der', 'die', 'das', 'und', 'den', 'von', 'dem', 'mit', 'sich', 'des', 'auf', 'für', 'ist', 'nicht', 'ein', 'eine',
+    'della', 'delle', 'degli', 'nella', 'nelle', 'sono', 'questo', 'questa', 'perché', 'anche'
+}
+
+
+def is_thai_text(text: str) -> bool:
+    """ตรวจสอบว่าข้อความมีตัวอักษรภาษาไทยหรือไม่"""
+    if not text:
+        return False
+    return bool(re.search(r'[\u0e00-\u0e7f]', str(text)))
+
+
+def is_thai_content(item: dict) -> bool:
+    """
+    ตรวจสอบว่าวิดีโอเป็นคอนเทนต์ภาษาไทยแท้ 100% หรือไม่
+    - ตรวจจากชื่อคลิป (Title) โดยตรงว่ามีตัวอักษรภาษาไทยหรือไม่
+    - ไม่อ้างอิงชื่อช่อง (Channel) เนื่องจาก YouTube UI ภาษาไทยจะมีการแทรกข้อความไทยอัตโนมัติ
+      (เช่น '...และอีก 2 ช่อง', '...และ Better Creating') ซึ่งทำให้คลิปภาษาอื่นหลุดเข้ามา
+    """
+    if not item:
+        return False
+    title = item.get("title", "")
+    return is_thai_text(title)
+
+
+def is_pure_english_text(text: str) -> bool:
+    """
+    ตรวจสอบข้อความว่าเป็นภาษาอังกฤษแท้ 100% หรือไม่
+    (ใช้ระบบ Character Whitelist อนุญาตเฉพาะตัวอักษรละตินมาตรฐาน A-Z, ตัวเลข, สัญลักษณ์, อีโมจิ
+     และตัดภาษาต่างประเทศทุกภาษา เช่น อินเดีย (Telugu/Hindi/Tamil), เวียดนาม, ฝรั่งเศส, จีน, ญี่ปุ่น, เกาหลี, อาหรับ, รัสเซีย ฯลฯ ออกทั้งหมด)
+    """
+    if not text or not str(text).strip():
+        return False
+    # หากมีตัวอักษรไทย ถือว่าเป็นภาษาไทย
+    if is_thai_text(text):
+        return False
+
+    # ตรวจสอบทุกตัวอักษร: ไม่อนุญาตตัวอักษรภาษาอื่น (Non-ASCII) นอกเหนือจากเครื่องหมายสากล/อีโมจิ
+    for ch in str(text):
+        cp = ord(ch)
+        if cp <= 127:  # Standard ASCII (A-Z, a-z, 0-9, standard symbols, space)
+            continue
+        if 0x2000 <= cp <= 0x206F:  # Smart quotes, dashes, bullets, ellipses
+            continue
+        if 0x20A0 <= cp <= 0x20CF:  # Currency symbols
+            continue
+        if (0x2190 <= cp <= 0x2BFF) or (0x1F000 <= cp <= 0x1FAFF):  # Emojis & misc UI symbols
+            continue
+        # พบตัวอักษรของภาษาอื่น เช่น อินเดีย (Telugu/Hindi/Tamil), จีน, เวียดนาม, ฝรั่งเศส ฯลฯ
+        return False
+
+    # ตรวจสอบคำศัพท์กับฐานข้อมูลคำภาษาอื่น (เช่น ฝรั่งเศส, สเปน, อินโดนีเซีย ที่เขียนด้วย ASCII ทั่วไป)
+    words = [w for w in re.findall(r'[a-zA-Z]+', str(text).lower()) if len(w) > 1]
+    if not words:
+        return False
+    foreign_cnt = sum(1 for w in words if w in FOREIGN_STOPWORDS)
+    if foreign_cnt >= 1 and (foreign_cnt / len(words) >= 0.15 or foreign_cnt >= 2):
+        return False
+
+    return True
+
+
+def is_thai_or_english_content(item: dict) -> bool:
+    """
+    ตรวจสอบว่าวิดีโอเป็นภาษาไทยหรือภาษาอังกฤษเท่านั้น
+    (ตัดภาษาอื่นออก 100% เช่น ภาษาอินเดีย, ฝรั่งเศส, เวียดนาม, สเปน, โปรตุเกส, อินโดนีเซีย, จีน, ญี่ปุ่น, เกาหลี, รัสเซีย, อาหรับ ฯลฯ)
+    """
+    if not item:
+        return False
+    if is_thai_content(item):
+        return True
+    
+    title = item.get("title", "")
+    channel = item.get("channel", "")
+    clean_channel = re.sub(r'\s*และ\s*', ' ', channel)
+    
+    # หากไม่ใช่ภาษาไทย ให้ตรวจสอบว่าทั้งชื่อคลิปและชื่อช่องเป็นภาษาอังกฤษแท้
+    return is_pure_english_text(title) and (not channel or is_pure_english_text(clean_channel))
+
+
+def detect_lang_tag(item: dict) -> str:
+    """
+    ระบุแท็กภาษาสำหรับแสดงผลบนการ์ดวิดีโอ:
+    - 'TH': 🇹🇭 ไทย
+    - 'EN': 🇬🇧 English
+    - 'INT': 🌐 สากล
+    """
+    if not item:
+        return "INT"
+    if is_thai_content(item):
+        return "TH"
+    title = item.get("title", "")
+    channel = item.get("channel", "")
+    clean_channel = re.sub(r'\s*และ\s*', ' ', channel)
+    if is_pure_english_text(title) and (not channel or is_pure_english_text(clean_channel)):
+        return "EN"
+    return "INT"
 
 
 def parse_relative_time_to_minutes(text: str) -> float:
@@ -134,35 +266,49 @@ def _extract_video_renderer_data(vr: dict) -> dict:
         else:
             description = ""
 
-        return {
+        norm_title = unicodedata.normalize("NFC", str(title).strip())
+        norm_channel = unicodedata.normalize("NFC", str(channel).strip())
+        norm_desc = unicodedata.normalize("NFC", str(description).strip())
+
+        item_dict = {
             "id": str(video_id).strip(),
-            "title": unicodedata.normalize("NFC", str(title).strip()),
-            "channel": unicodedata.normalize("NFC", str(channel).strip()),
+            "title": norm_title,
+            "channel": norm_channel,
             "views": str(views).strip(),
             "published": str(published).strip(),
             "duration": str(duration).strip(),
             "thumbnail": str(thumbnail).strip(),
-            "description": unicodedata.normalize("NFC", str(description).strip()),
+            "description": norm_desc,
             "url": f"https://www.youtube.com/watch?v={video_id}",
             "time_minutes": parse_relative_time_to_minutes(published)
         }
+        item_dict["is_thai"] = is_thai_content(item_dict)
+        item_dict["is_thai_or_eng"] = is_thai_or_english_content(item_dict)
+        item_dict["lang_tag"] = detect_lang_tag(item_dict)
+        return item_dict
     except Exception:
         return None
 
 
 @st.cache_data(ttl=180, show_spinner=False)
-def fetch_youtube_search_results(query: str, sort_by: str = "upload_date", max_results: int = 30) -> list:
+def fetch_youtube_search_results(
+    query: str, 
+    sort_by: str = "upload_date", 
+    max_results: int = 30,
+    lang_filter: str = "thai_first"
+) -> list:
     """
     ค้นหาคลิปวิดีโอจาก YouTube Search โดยตรง (Zero-API-Key Mode)
     รองรับการดึงผลลัพธ์จำนวนมาก (10-300 คลิป) ผ่าน Multi-page Pagination
-    พร้อมจัดเรียงตามลำดับเวลาล่าสุด (Newest First) และแคชข้อมูล 3 นาที
+    พร้อมระบบคัดกรองและให้ความสำคัญกับเนื้อหาภาษาไทยและภาษาอังกฤษ
+    และจัดเรียงตามลำดับเวลาล่าสุด (Newest First) พร้อมแคชข้อมูล 3 นาที
     """
     if not query or not query.strip():
         return []
 
     encoded_query = urllib.parse.quote_plus(query.strip())
     sp = SORT_SP_MAPPING.get(sort_by, "CAISBAgCEAE%3D")
-    url = f"https://www.youtube.com/results?search_query={encoded_query}"
+    url = f"https://www.youtube.com/results?search_query={encoded_query}&gl=TH&hl=th"
     if sp:
         url += f"&sp={sp}"
 
@@ -171,7 +317,7 @@ def fetch_youtube_search_results(query: str, sort_by: str = "upload_date", max_r
     continuation_token = None
 
     try:
-        resp = requests.get(url, headers=YOUTUBE_HEADERS, timeout=(5, 12))
+        resp = requests.get(url, headers=YOUTUBE_HEADERS, cookies=YOUTUBE_COOKIES, timeout=(5, 12))
         if resp.status_code == 200:
             match = re.search(r'var ytInitialData\s*=\s*({.+?});</script>', resp.text)
             if not match:
@@ -200,11 +346,23 @@ def fetch_youtube_search_results(query: str, sort_by: str = "upload_date", max_r
                     endpoint = sections[-1]['continuationItemRenderer'].get('continuationEndpoint', {})
                     continuation_token = endpoint.get('continuationCommand', {}).get('token')
 
-                # Pagination
-                max_loop_steps = min(25, (max_results // 12) + 4)
+                # Pagination: หากต้องการกรองภาษา ให้ดึงเผื่อไว้เพื่อให้ได้คลิปครบตามจำนวน
+                target_fetch_count = max_results if lang_filter == "all" else max(max_results + 15, int(max_results * 1.5))
+                max_loop_steps = min(30, (target_fetch_count // 10) + 5)
                 loop_step = 0
 
-                while len(results) < max_results and continuation_token and loop_step < max_loop_steps:
+                def should_continue_fetching() -> bool:
+                    if not continuation_token or loop_step >= max_loop_steps:
+                        return False
+                    if lang_filter == "thai_only":
+                        thai_count = sum(1 for r in results if r.get("is_thai", False))
+                        return thai_count < max_results
+                    elif lang_filter == "thai_and_eng":
+                        th_en_count = sum(1 for r in results if r.get("is_thai_or_eng", False))
+                        return th_en_count < max_results
+                    return len(results) < target_fetch_count
+
+                while should_continue_fetching():
                     loop_step += 1
                     payload = {
                         'context': {
@@ -222,6 +380,7 @@ def fetch_youtube_search_results(query: str, sort_by: str = "upload_date", max_r
                             'https://www.youtube.com/youtubei/v1/search',
                             json=payload,
                             headers={'Content-Type': 'application/json', 'User-Agent': YOUTUBE_HEADERS['User-Agent']},
+                            cookies=YOUTUBE_COOKIES,
                             timeout=(4, 10)
                         )
                         continuation_token = None
@@ -252,8 +411,19 @@ def fetch_youtube_search_results(query: str, sort_by: str = "upload_date", max_r
     except Exception:
         pass
 
+    # เรียงลำดับตามเวลาล่าสุดก่อน (Upload Date)
     if sort_by == "upload_date" and results:
         results = sorted(results, key=lambda x: x.get("time_minutes", 999999999.0))
+
+    # กรองและจัดลำดับตามภาษา (Language Filtering / Prioritization)
+    if lang_filter == "thai_only":
+        results = [r for r in results if r.get("is_thai", False)]
+    elif lang_filter == "thai_and_eng":
+        results = [r for r in results if r.get("is_thai_or_eng", False)]
+    elif lang_filter == "thai_first":
+        thai_videos = [r for r in results if r.get("is_thai", False)]
+        other_videos = [r for r in results if not r.get("is_thai", False)]
+        results = thai_videos + other_videos
 
     return results[:max_results]
 
@@ -261,7 +431,11 @@ def fetch_youtube_search_results(query: str, sort_by: str = "upload_date", max_r
 def _init_session_states():
     """เตรียมสถานะ Session State สำหรับ YouTube Search Hub"""
     if "yt_search_query" not in st.session_state:
-        st.session_state["yt_search_query"] = "ข่าวไอที เทคโนโลยี ล่าสุด"
+        st.session_state["yt_search_query"] = "ข่าวไอทีล่าสุด"
+    if "input_yt_search" not in st.session_state:
+        st.session_state["input_yt_search"] = "ข่าวไอทีล่าสุด"
+    if "yt_search_lang" not in st.session_state:
+        st.session_state["yt_search_lang"] = "thai_first"
     if "yt_search_sort" not in st.session_state:
         st.session_state["yt_search_sort"] = "upload_date"
     if "yt_search_limit" not in st.session_state:
@@ -271,7 +445,7 @@ def _init_session_states():
     if "yt_search_favorites" not in st.session_state:
         st.session_state["yt_search_favorites"] = []
     if "yt_search_history" not in st.session_state:
-        st.session_state["yt_search_history"] = ["ข่าวไอที เทคโนโลยี ล่าสุด", "ไฮไลท์ฟุตบอล ล่าสุด"]
+        st.session_state["yt_search_history"] = ["ข่าวไอทีล่าสุด", "AI & Python", "ไฮไลท์ฟุตบอล"]
 
 
 def add_to_favorites(video: dict):
@@ -446,17 +620,18 @@ def render_youtube_search_page():
                 <span class="yt-badge-live">⚡ เรียงลำดับคลิปใหม่ล่าสุด (Live Newest First)</span>
             </div>
             <p class="yt-header-sub">
-                ค้นหาวิดีโอบน YouTube แบบเรียลไทม์ • เรียงตามวัน-เวลาใหม่ล่าสุด • พร้อมโรงภาพยนตร์ส่วนตัว (Theater View)
+                ค้นหาวิดีโอบน YouTube แบบเรียลไทม์ • เน้นคอนเทนต์ภาษาไทยเป็นหลัก • เรียงตามวัน-เวลาใหม่ล่าสุด • พร้อมโรงภาพยนตร์ส่วนตัว (Theater View)
             </p>
         </div>
     """, unsafe_allow_html=True)
 
     # Quick Topics Bar
-    st.markdown("<p style='font-size: 0.82rem; font-weight: 700; color: #475569; margin-bottom: 6px;'>⚡ ค้นหาด่วนตามหัวข้อยอดนิยม (จัดเรียงคลิปใหม่ล่าสุดอัตโนมัติ):</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size: 0.82rem; font-weight: 700; color: #475569; margin-bottom: 6px;'>⚡ ค้นหาด่วนตามหัวข้อยอดนิยม (ค้นหาตามภาษาที่เลือกไว้ทันที):</p>", unsafe_allow_html=True)
     q_cols = st.columns(len(QUICK_TOPICS))
     for i, (label, search_term) in enumerate(QUICK_TOPICS):
         if q_cols[i].button(label, key=f"quick_topic_{i}", use_container_width=True):
             st.session_state["yt_search_query"] = search_term
+            st.session_state["input_yt_search"] = search_term
             st.session_state["yt_search_sort"] = "upload_date"
             if search_term not in st.session_state["yt_search_history"]:
                 st.session_state["yt_search_history"].insert(0, search_term)
@@ -476,15 +651,38 @@ def render_youtube_search_page():
     # ==========================================
     with tab1:
         with st.container():
-            col_search, col_sort, col_limit, col_btn = st.columns([3.3, 1.8, 1.3, 1.1])
+            col_search, col_lang, col_sort, col_limit, col_btn = st.columns([3.0, 1.8, 1.6, 1.2, 1.0])
             
             with col_search:
                 current_query = st.text_input(
                     "🔍 คำค้นหา (Search Query):",
-                    value=st.session_state.get("yt_search_query", "ข่าวไอที เทคโนโลยี ล่าสุด"),
-                    placeholder="พิมพ์คำค้นหา เช่น ข่าวไอทีล่าสุด, ไฮไลท์ฟุตบอล...",
+                    value=st.session_state.get("yt_search_query", "ข่าวไอทีล่าสุด"),
+                    placeholder="พิมพ์คำค้นหา เช่น AI & Python, ไฮไลท์ฟุตบอล...",
                     key="input_yt_search"
                 )
+
+            with col_lang:
+                lang_options = {
+                    "🇹🇭 ภาษาไทยเป็นหลัก (Thai First)": "thai_first",
+                    "🇹🇭 ภาษาไทยเท่านั้น (Thai Only)": "thai_only",
+                    "🇹🇭🇬🇧 ไทยและอังกฤษเท่านั้น (Thai & English Only)": "thai_and_eng",
+                    "🌐 รวมทุกภาษา (All Languages)": "all"
+                }
+                current_lang_val = st.session_state.get("yt_search_lang", "thai_first")
+                lang_idx = 0
+                for idx, (k, v) in enumerate(lang_options.items()):
+                    if v == current_lang_val:
+                        lang_idx = idx
+                        break
+
+                selected_lang_label = st.selectbox(
+                    "🌐 ตัวกรองภาษา:",
+                    options=list(lang_options.keys()),
+                    index=lang_idx,
+                    key="select_yt_lang"
+                )
+                selected_lang = lang_options[selected_lang_label]
+                st.session_state["yt_search_lang"] = selected_lang
 
             with col_sort:
                 sort_options = {
@@ -525,6 +723,7 @@ def render_youtube_search_page():
 
         if do_search:
             st.session_state["yt_search_query"] = current_query
+            st.session_state["yt_search_lang"] = selected_lang
             st.session_state["yt_search_sort"] = selected_sort
             st.session_state["yt_search_limit"] = selected_limit
             if current_query and current_query.strip():
@@ -593,12 +792,18 @@ def render_youtube_search_page():
         # แสดงผลการค้นหา
         # ==========================================
         active_query = st.session_state.get("yt_search_query", "ข่าวไอที เทคโนโลยี ล่าสุด")
+        active_lang = st.session_state.get("yt_search_lang", "thai_first")
         active_sort = st.session_state.get("yt_search_sort", "upload_date")
         active_limit = st.session_state.get("yt_search_limit", 30)
 
         with st.spinner(f"⚡ กำลังดึง {active_limit} คลิปบน YouTube สำหรับ '{active_query}'..."):
             try:
-                videos = fetch_youtube_search_results(active_query, sort_by=active_sort, max_results=active_limit)
+                videos = fetch_youtube_search_results(
+                    active_query, 
+                    sort_by=active_sort, 
+                    max_results=active_limit,
+                    lang_filter=active_lang
+                )
             except Exception as e:
                 st.warning(f"⚠️ เกิดข้อผิดพลาดในการค้นหา: {str(e)}")
                 videos = []
@@ -607,12 +812,24 @@ def render_youtube_search_page():
             st.warning(f"⚠️ ไม่พบผลลัพธ์วิดีโอสำหรับคำค้นหา '{active_query}' หรือการเชื่อมต่อมีปัญหา กรุณาลองใช้คำค้นหาอื่น")
         else:
             sort_text = "🕒 จัดเรียง: อัปโหลดล่าสุด (ใหม่สุดไล่ลงไป)" if active_sort == "upload_date" else f"จัดเรียง: {active_sort}"
+            if active_lang == "thai_first":
+                lang_badge = "🇹🇭 เน้นภาษาไทยเป็นหลัก"
+            elif active_lang == "thai_only":
+                lang_badge = "🇹🇭 ภาษาไทยเท่านั้น"
+            elif active_lang == "thai_and_eng":
+                lang_badge = "🇹🇭🇬🇧 ไทย & อังกฤษเท่านั้น"
+            else:
+                lang_badge = "🌐 รวมทุกภาษา"
+
             st.markdown(f"""
                 <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;'>
                     <span style='font-size: 1.05rem; font-weight: 700; color: #0f172a;'>
                         📺 ผลการค้นหา ({len(videos)} คลิป) สำหรับ: <span style='color: #2563eb;'>"{active_query}"</span>
                     </span>
-                    <span class="yt-time-pill" style="font-size: 0.78rem; padding: 3px 8px;">{sort_text}</span>
+                    <div style='display: flex; gap: 6px;'>
+                        <span class="yt-time-pill" style="font-size: 0.78rem; padding: 3px 8px; background: #f0fdf4; color: #166534; border-color: #bbf7d0;">{lang_badge}</span>
+                        <span class="yt-time-pill" style="font-size: 0.78rem; padding: 3px 8px;">{sort_text}</span>
+                    </div>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -637,6 +854,14 @@ def render_youtube_search_page():
             for idx, vid in enumerate(videos):
                 col = grid_cols[idx % 3]
                 with col:
+                    tag_type = vid.get('lang_tag', 'INT')
+                    if tag_type == 'TH':
+                        thai_tag = "<span style='background:#dcfce7; color:#15803d; font-size:0.70rem; font-weight:700; padding:1px 6px; border-radius:4px;'>🇹🇭 ไทย</span>"
+                    elif tag_type == 'EN':
+                        thai_tag = "<span style='background:#e0e7ff; color:#3730a3; font-size:0.70rem; font-weight:700; padding:1px 6px; border-radius:4px;'>🇬🇧 English</span>"
+                    else:
+                        thai_tag = "<span style='background:#f1f5f9; color:#64748b; font-size:0.70rem; font-weight:600; padding:1px 6px; border-radius:4px;'>🌐 สากล</span>"
+
                     st.markdown(f"""
                         <div class="yt-card-container">
                             <div class="yt-thumb-box">
@@ -647,6 +872,7 @@ def render_youtube_search_page():
                                 <div class="yt-card-title" title="{vid['title']}">{vid['title']}</div>
                                 <div class="yt-card-meta">
                                     <span>👤 <b>{vid['channel']}</b></span>
+                                    {thai_tag}
                                 </div>
                                 <div class="yt-card-meta" style="font-size: 0.76rem; color: #64748b;">
                                     <span class="yt-time-pill">🕒 {vid['published']}</span>
@@ -717,6 +943,7 @@ def render_youtube_search_page():
                 for h_idx, h_query in enumerate(history):
                     if st.button(f"🔍 {h_query}", key=f"hist_btn_{h_idx}", use_container_width=True):
                         st.session_state["yt_search_query"] = h_query
+                        st.session_state["input_yt_search"] = h_query
                         st.session_state["yt_search_sort"] = "upload_date"
                         st.rerun()
 
