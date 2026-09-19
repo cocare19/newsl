@@ -9,8 +9,14 @@ if CURRENT_DIR not in sys.path:
 
 # ฟังก์ชันช่วยโหลดโมดูลแบบ Dynamic Fallback การันตีทำงานได้ทุกสภาพแวดล้อม
 def load_local_module(module_name: str):
+    import importlib
+    if module_name in sys.modules:
+        try:
+            return importlib.reload(sys.modules[module_name])
+        except Exception:
+            pass
     try:
-        return __import__(module_name)
+        return importlib.import_module(module_name)
     except Exception:
         file_path = os.path.join(CURRENT_DIR, f"{module_name}.py")
         if os.path.exists(file_path):
@@ -29,25 +35,25 @@ tech_hub_mod = load_local_module("tech_hub_module")
 yt_search_mod = load_local_module("youtube_search_module")
 yt_trans_mod = load_local_module("youtube_transcript_module")
 
-CUSTOM_CSS = config_mod.CUSTOM_CSS
-fetch_gold_and_spot_data = data_loader_mod.fetch_gold_and_spot_data
-fetch_thai_oil = data_loader_mod.fetch_thai_oil
-get_historical_thai_oil_data = data_loader_mod.get_historical_thai_oil_data
-fetch_real_historical_oil_table = data_loader_mod.fetch_real_historical_oil_table
-fetch_today_oil_all_brands = data_loader_mod.fetch_today_oil_all_brands
-fetch_macro_indicators = data_loader_mod.fetch_macro_indicators
-fetch_tech_ai_stocks = data_loader_mod.fetch_tech_ai_stocks
-fetch_goal_standings = getattr(data_loader_mod, 'fetch_goal_standings', data_loader_mod.fetch_skysports_standings)
+CUSTOM_CSS = getattr(config_mod, 'CUSTOM_CSS', '')
+fetch_gold_and_spot_data = getattr(data_loader_mod, 'fetch_gold_and_spot_data', lambda: {})
+fetch_thai_oil = getattr(data_loader_mod, 'fetch_thai_oil', lambda: {})
+get_historical_thai_oil_data = getattr(data_loader_mod, 'get_historical_thai_oil_data', lambda: None)
+fetch_real_historical_oil_table = getattr(data_loader_mod, 'fetch_real_historical_oil_table', lambda: None)
+fetch_today_oil_all_brands = getattr(data_loader_mod, 'fetch_today_oil_all_brands', lambda: None)
+fetch_macro_indicators = getattr(data_loader_mod, 'fetch_macro_indicators', lambda: {})
+fetch_tech_ai_stocks = getattr(data_loader_mod, 'fetch_tech_ai_stocks', lambda: {})
+fetch_goal_standings = getattr(data_loader_mod, 'fetch_goal_standings', getattr(data_loader_mod, 'fetch_skysports_standings', lambda: pd.DataFrame()))
 fetch_skysports_standings = fetch_goal_standings
-fetch_goal_fixtures = getattr(data_loader_mod, 'fetch_goal_fixtures', data_loader_mod.fetch_skysports_fixtures)
+fetch_goal_fixtures = getattr(data_loader_mod, 'fetch_goal_fixtures', getattr(data_loader_mod, 'fetch_skysports_fixtures', lambda: []))
 fetch_skysports_fixtures = fetch_goal_fixtures
-fetch_ucl_standings = data_loader_mod.fetch_ucl_standings
-fetch_ucl_fixtures = data_loader_mod.fetch_ucl_fixtures
+fetch_ucl_standings = getattr(data_loader_mod, 'fetch_ucl_standings', lambda: pd.DataFrame())
+fetch_ucl_fixtures = getattr(data_loader_mod, 'fetch_ucl_fixtures', lambda: [])
 
-render_rss_page = rss_mod.render_rss_page
-render_tech_hub_page = tech_hub_mod.render_tech_hub_page
-render_youtube_search_page = yt_search_mod.render_youtube_search_page
-render_youtube_transcript_page = yt_trans_mod.render_youtube_transcript_page
+render_rss_page = getattr(rss_mod, 'render_rss_page', lambda: None)
+render_tech_hub_page = getattr(tech_hub_mod, 'render_tech_hub_page', lambda: None)
+render_youtube_search_page = getattr(yt_search_mod, 'render_youtube_search_page', lambda: None)
+render_youtube_transcript_page = getattr(yt_trans_mod, 'render_youtube_transcript_page', lambda: None)
 
 import streamlit as st
 import streamlit.components.v1 as components
