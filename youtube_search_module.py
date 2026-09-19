@@ -33,7 +33,8 @@ QUICK_TOPICS = [
     ("🍿 สปอยล์หนัง", "สปอยล์หนัง"),
     ("🎶 รวมเพลงเพราะ", "รวมเพลงเพราะ"),
     ("🙏 หลวงตาสุริยา", "หลวงตาสุริยา วัดป่าธรรมอุทยาน"),
-    ("📈 วิเคราะห์ตลาด & หุ้น", "วิเคราะห์หุ้น ตลาดหุ้น")
+    ("📈 วิเคราะห์ตลาด & หุ้น", "วิเคราะห์หุ้น ตลาดหุ้น"),
+    ("💡 พอดแคสต์ & สาระ", "พอดแคสต์ สาระน่ารู้")
 ]
 
 
@@ -625,11 +626,24 @@ def render_youtube_search_page():
         </div>
     """, unsafe_allow_html=True)
 
-    # Quick Topics Bar
+    # Quick Topics Bar (Locked 4-column grid across 2 rows for responsive readability)
     st.markdown("<p style='font-size: 0.82rem; font-weight: 700; color: #475569; margin-bottom: 6px;'>⚡ ค้นหาด่วนตามหัวข้อยอดนิยม (ค้นหาตามภาษาที่เลือกไว้ทันที):</p>", unsafe_allow_html=True)
-    q_cols = st.columns(len(QUICK_TOPICS))
-    for i, (label, search_term) in enumerate(QUICK_TOPICS):
-        if q_cols[i].button(label, key=f"quick_topic_{i}", use_container_width=True):
+    
+    r1_cols = st.columns(4)
+    for i, (label, search_term) in enumerate(QUICK_TOPICS[:4]):
+        if r1_cols[i].button(label, key=f"quick_topic_{i}", use_container_width=True):
+            st.session_state["yt_search_query"] = search_term
+            st.session_state["input_yt_search"] = search_term
+            st.session_state["yt_search_sort"] = "upload_date"
+            if search_term not in st.session_state["yt_search_history"]:
+                st.session_state["yt_search_history"].insert(0, search_term)
+                st.session_state["yt_search_history"] = st.session_state["yt_search_history"][:10]
+            st.rerun()
+
+    r2_cols = st.columns(4)
+    for j, (label, search_term) in enumerate(QUICK_TOPICS[4:]):
+        idx = j + 4
+        if r2_cols[j].button(label, key=f"quick_topic_{idx}", use_container_width=True):
             st.session_state["yt_search_query"] = search_term
             st.session_state["input_yt_search"] = search_term
             st.session_state["yt_search_sort"] = "upload_date"

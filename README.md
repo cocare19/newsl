@@ -37,18 +37,20 @@ graph TD
         App --> M1[1. Real-Time Market & Pricing]
         App --> M2[2. Premier League Tables]
         App --> M3[3. Premier League Fixtures]
-        App --> M4[4. Curated RSS Feeds]
-        App --> M5[5. Media & Video Hub]
-        App --> M6[6. YouTube Search Hub]
-        App --> M7[7. YouTube Transcript Pro]
+        App --> M4[4. Champions League Tables]
+        App --> M5[5. Champions League Fixtures]
+        App --> M6[6. Curated RSS Feeds]
+        App --> M7[7. Media & Video Hub]
+        App --> M8[8. YouTube Search Hub]
+        App --> M9[9. YouTube Transcript Pro]
     end
 
     subgraph Data Layer & Scrapers
-        M1 & M2 & M3 --> DL[data_loader.py]
-        M4 --> RSS[rss_module.py]
-        M5 --> TH[tech_hub_module.py]
-        M6 --> YTS[youtube_search_module.py]
-        M7 --> YTT[youtube_transcript_module.py]
+        M1 & M2 & M3 & M4 & M5 --> DL[data_loader.py]
+        M6 --> RSS[rss_module.py]
+        M7 --> TH[tech_hub_module.py]
+        M8 --> YTS[youtube_search_module.py]
+        M9 --> YTT[youtube_transcript_module.py]
     end
 
     subgraph External Sources
@@ -82,8 +84,11 @@ graph TD
   - ดึง Dollar Index (DXY), US 10Y Yield, WTI Crude Oil, Nasdaq 100, S&P 500
   - ดึงราคาหุ้นเทคโนโลยี & AI ชั้นนำ (NVDA, MSFT, AAPL, GOOGL, AMZN, META, TSM, AVGO, TSLA)
 - **Premier League Standings & Fixtures**:
-  - ดึงตารางคะแนนสด 20 สโมสรจาก ESPN & Sky Sports
-  - ดึงผลบอลสดและเวลาเตะตรงเวลาไทย (UTC+7) จาก GoalDaddy Live API พร้อมชุดข้อมูลสำรองสมบูรณ์
+  - ดึงตารางคะแนนสด 20 สโมสรจาก Goal.com, ESPN & Sky Sports
+  - ดึงผลบอลสดและตารางเตะพรีเมียร์ลีกตรงเวลาไทย (UTC+7) จาก Goal.com Live Feed
+- **UEFA Champions League Standings & Fixtures**:
+  - ดึงตารางคะแนนสดรอบ League Phase 36 ทีมจาก Goal.com พร้อมระบบคัดเลือก (เข้ารอบ 16 ทีม, เพลย์ออฟ, ตกรอบ)
+  - ดึงผลบอลสดและตารางเตะ UCL ครบทั้ง 8 Matchdays (144 คู่) ตรงตามเวลาไทย (UTC+7) จาก Goal.com Live Feed
 
 ### 3. Curated RSS Live Feeds (`rss_module.py`)
 - **ช่องสัญญาณข่าว 6 หมวดหมู่หลัก**:

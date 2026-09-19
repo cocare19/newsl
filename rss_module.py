@@ -158,7 +158,7 @@ def render_rss_page():
     col_btn, col_search = st.columns([1.2, 2.8])
     with col_btn:
         st.write("")
-        btn_refresh = st.button("🔄 โหลดข่าวสดล่าสุด", use_container_width=True, key="btn_fetch_rss_clean")
+        btn_refresh = st.button("🔄 Refresh", use_container_width=True, key="btn_fetch_rss_clean")
     with col_search:
         keyword_filter = st.text_input("🔍 ค้นหาหัวข้อข่าวในฟีดนี้:", placeholder="พิมพ์คำค้นหา เช่น AI, Gold, Liverpool...", key="rss_keyword_filter")
 

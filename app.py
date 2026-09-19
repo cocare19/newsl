@@ -41,6 +41,8 @@ fetch_goal_standings = getattr(data_loader_mod, 'fetch_goal_standings', data_loa
 fetch_skysports_standings = fetch_goal_standings
 fetch_goal_fixtures = getattr(data_loader_mod, 'fetch_goal_fixtures', data_loader_mod.fetch_skysports_fixtures)
 fetch_skysports_fixtures = fetch_goal_fixtures
+fetch_ucl_standings = data_loader_mod.fetch_ucl_standings
+fetch_ucl_fixtures = data_loader_mod.fetch_ucl_fixtures
 
 render_rss_page = rss_mod.render_rss_page
 render_tech_hub_page = tech_hub_mod.render_tech_hub_page
@@ -111,10 +113,12 @@ with st.sidebar:
             "📈 1. Real-Time Market & Pricing",
             "🏆 2. Premier League Tables",
             "📅 3. Premier League Fixtures",
-            "📡 4. Curated RSS Feeds",
-            "📺 5. Media & Video Hub",
-            "🔍 6. YouTube Search Hub",
-            "🎬 7. YouTube Transcript Pro"
+            "⭐ 4. Champions League Tables",
+            "📅 5. Champions League Fixtures",
+            "📡 6. Curated RSS Feeds",
+            "📺 7. Media & Video Hub",
+            "🔍 8. YouTube Search Hub",
+            "🎬 9. YouTube Transcript Pro"
         ]
     )
 
@@ -186,9 +190,11 @@ if menu_selection == "📈 1. Real-Time Market & Pricing":
         st.markdown("#### 📈 Real-Time Asset, Gold, Thai Fuel & Tech Markets")
         st.caption(f"🕒 อัปเดตข้อมูลสด ณ เวลา: **{now_bkk}**")
 
-        if st.button("🔄 รีเฟรชราคาทองคำ, น้ำมันไทย และตลาดโลกสด", key="btn_market_refresh"):
-            st.cache_data.clear()
-            st.rerun()
+        c_r1, _ = st.columns([1.2, 3.8])
+        with c_r1:
+            if st.button("🔄 Refresh", key="btn_market_refresh", use_container_width=True):
+                st.cache_data.clear()
+                st.rerun()
 
         st.markdown("### 🥇 ราคาทองคำแท่งไทย & ค่าเงินบาท")
         gold_info = fetch_gold_and_spot_data()
@@ -679,10 +685,9 @@ elif menu_selection == "🏆 2. Premier League Tables":
             # Check for live matches in standings
             live_active_clubs = len(df_standings[df_standings['Live'].astype(str).str.strip() != '']) if 'Live' in df_standings.columns else 0
 
-            t2_c1, t2_c2 = st.columns([4.2, 7.8])
+            t2_c1, t2_c2 = st.columns([1.2, 3.8])
             with t2_c1:
-                refresh_label = f"🔄 รีเฟรชตารางคะแนนสด {'(🔴 กำลังเตะ ' + str(live_active_clubs) + ' ทีม)' if live_active_clubs > 0 else ''}"
-                if st.button(refresh_label, key="btn_sky_refresh", use_container_width=True):
+                if st.button("🔄 Refresh", key="btn_sky_refresh", use_container_width=True):
                     st.cache_data.clear()
                     st.rerun()
             with t2_c2:
@@ -794,14 +799,15 @@ elif menu_selection == "📅 3. Premier League Fixtures":
             # Check for live matches
             live_count = len(df_all_fixtures[df_all_fixtures.get('MatchState', '') == 'LIVE']) if 'MatchState' in df_all_fixtures else 0
             
-            t3_c1, t3_c2 = st.columns([3.5, 8.5])
+            t3_c1, t3_c2 = st.columns([1.2, 3.8])
             with t3_c1:
-                refresh_label = f"🔄 รีเฟรชผลและตารางสด {'(🔴 กำลังแข่ง ' + str(live_count) + ' คู่)' if live_count > 0 else ''}"
-                if st.button(refresh_label, key="btn_fixtures_refresh", use_container_width=True):
+                if st.button("🔄 Refresh", key="btn_fixtures_refresh", use_container_width=True):
                     st.cache_data.clear()
                     st.rerun()
+            with t3_c2:
+                st.link_button("🌐 Goal.com EPL", "https://www.goal.com/th/premier-league/%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%87%E0%B9%81%E0%B8%82%E0%B9%88%E0%B8%87-%E0%B8%9C%E0%B8%A5%E0%B8%81%E0%B8%B2%E0%B8%A3%E0%B9%81%E0%B8%82%E0%B9%88%E0%B8%87%E0%B8%82%E0%B8%B1%E0%B8%99/2kwbbcootiqqgmrzs6o5inle5", use_container_width=False)
 
-            ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([3, 3, 1.4])
+            ctrl_col1, ctrl_col2 = st.columns([1, 1])
             with ctrl_col1:
                 all_mws = list(dict.fromkeys(df_all_fixtures['MW'].tolist()))
                 mw_options = ["🌟 แสดงทุกสัปดาห์ (All Matchweeks)"] + all_mws
@@ -827,10 +833,6 @@ elif menu_selection == "📅 3. Premier League Fixtures":
                 )
             with ctrl_col2:
                 search_team = st.text_input("🔍 ค้นหาทีมโปรด:", placeholder="พิมพ์ เช่น Arsenal, Man Utd, Liverpool...", key="pl_team_search")
-            with ctrl_col3:
-                st.write("")
-                st.write("")
-                st.link_button("🌐 Goal.com", "https://www.goal.com/th/premier-league/%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%87%E0%B9%81%E0%B8%82%E0%B9%88%E0%B8%87-%E0%B8%9C%E0%B8%A5%E0%B8%81%E0%B8%B2%E0%B8%A3%E0%B9%81%E0%B8%82%E0%B9%88%E0%B8%87%E0%B8%82%E0%B8%B1%E0%B8%99/2kwbbcootiqqgmrzs6o5inle5", use_container_width=True)
 
             st.markdown("---")
             df_filtered = df_all_fixtures.copy()
@@ -900,29 +902,257 @@ elif menu_selection == "📅 3. Premier League Fixtures":
     except Exception as e:
         st.warning(f"⚠️ เกิดข้อผิดพลาดในการโหลดโปรแกรมการแข่งขัน: {str(e)}")
 
-# --- 4. CURATED RSS FEEDS ---
-elif menu_selection == "📡 4. Curated RSS Feeds":
+# --- 4. CHAMPIONS LEAGUE TABLES ---
+elif menu_selection == "⭐ 4. Champions League Tables":
+    try:
+        st.markdown("#### ⭐ UEFA Champions League Standings & Live Form")
+        st.caption("ตารางคะแนนสด ยูฟ่า แชมเปียนส์ลีก (รอบ League Phase 36 ทีม) อัปเดตอันดับ แต้ม ผลต่างประตู ฟอร์มล่าสุด และ Live Score (Goal.com Live Feed)")
+
+        t4_c1, t4_c2 = st.columns([1.2, 3.8])
+        with t4_c1:
+            if st.button("🔄 Refresh", key="btn_ucl_standings_refresh", use_container_width=True):
+                st.cache_data.clear()
+                st.rerun()
+        with t4_c2:
+            st.link_button("🌐 Goal.com UCL Standings", "https://www.goal.com/th/champions-league/%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%87/4oogyu6o156iphvdvphwpck10", use_container_width=False)
+
+        df_ucl_standings = fetch_ucl_standings()
+
+        if not df_ucl_standings.empty:
+            st.markdown("---")
+            rows_html = []
+            for _, row in df_ucl_standings.iterrows():
+                pos = int(row['Pos'])
+                # UCL Qualification Rules:
+                # 1-8: Direct to Round of 16 (Blue)
+                # 9-24: Knockout play-offs (Orange)
+                # 25-36: Eliminated (Red)
+                if pos <= 8:
+                    pos_badge = f"<span style='background:#2563EB;color:#FFF;border-radius:4px;font-weight:700;padding:2px 6px;font-size:0.75rem;'>{pos}</span>"
+                elif pos <= 24:
+                    pos_badge = f"<span style='background:#EA580C;color:#FFF;border-radius:4px;font-weight:700;padding:2px 6px;font-size:0.75rem;'>{pos}</span>"
+                else:
+                    pos_badge = f"<span style='background:#DC2626;color:#FFF;border-radius:4px;font-weight:700;padding:2px 6px;font-size:0.75rem;'>{pos}</span>"
+
+                badge_url = row.get('Badge', '')
+                badge_tag = f"<img src='{badge_url}' style='width:20px;height:20px;vertical-align:middle;margin-right:6px;object-fit:contain;' onerror=\"this.style.display='none'\">" if badge_url else ""
+
+                club_name = row['Club']
+                live_val = str(row.get('Live', '')).strip()
+                if live_val:
+                    live_tag = f"<span class='pl-live-score-pill'>🔴 {live_val}</span>"
+                else:
+                    live_tag = "<span style='color:#94A3B8;font-size:0.8rem;'>-</span>"
+
+                gd_val = str(row['GD'])
+                gd_color = "#16A34A" if gd_val.startswith('+') and gd_val != '+0' else ("#DC2626" if gd_val.startswith('-') else "#64748B")
+
+                # Form badges
+                form_raw = str(row.get('Form', '')).strip().upper()
+                form_html_list = []
+                for ch in form_raw:
+                    if ch == 'W':
+                        form_html_list.append("<span class='pl-form-badge pl-form-w'>W</span>")
+                    elif ch == 'D':
+                        form_html_list.append("<span class='pl-form-badge pl-form-d'>D</span>")
+                    elif ch == 'L':
+                        form_html_list.append("<span class='pl-form-badge pl-form-l'>L</span>")
+                form_display = "".join(form_html_list) if form_html_list else "<span style='color:#94A3B8;font-size:0.8rem;'>-</span>"
+
+                row_html = (
+                    f"<tr>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{pos_badge}</td>"
+                    f"<td style='padding:7px 8px;text-align:left;font-weight:600;white-space:nowrap;'>{badge_tag}{club_name}</td>"
+                    f"<td style='padding:7px 4px;text-align:center;'>{live_tag}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row['Pl']}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row['W']}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row['D']}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row['L']}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row.get('F', '-')}</td>"
+                    f"<td style='padding:7px 3px;text-align:center;'>{row.get('A', '-')}</td>"
+                    f"<td style='padding:7px 4px;text-align:center;font-weight:700;color:{gd_color};'>{gd_val}</td>"
+                    f"<td class='pl-pts-col' style='padding:7px 6px;text-align:center;font-weight:800;font-size:0.92rem;'>{row['Pts']}</td>"
+                    f"<td style='padding:7px 6px;text-align:center;white-space:nowrap;'>{form_display}</td>"
+                    f"</tr>"
+                )
+                rows_html.append(row_html)
+
+            table_body = "".join(rows_html)
+            final_html = (
+                "<div class='pl-table-container' style='overflow-x:auto;'>"
+                "<table class='pl-table' style='width:100%;border-collapse:collapse;'>"
+                "<thead><tr>"
+                "<th style='width:32px;text-align:center;'>#</th>"
+                "<th style='text-align:left;padding-left:8px;'>สโมสร (Club)</th>"
+                "<th style='width:65px;text-align:center;'>สด (Live)</th>"
+                "<th style='width:34px;text-align:center;'>แข่ง</th>"
+                "<th style='width:34px;text-align:center;'>ชนะ</th>"
+                "<th style='width:34px;text-align:center;'>เสมอ</th>"
+                "<th style='width:34px;text-align:center;'>แพ้</th>"
+                "<th style='width:36px;text-align:center;'>ได้</th>"
+                "<th style='width:36px;text-align:center;'>เสีย</th>"
+                "<th style='width:38px;text-align:center;'>+/-</th>"
+                "<th class='pl-pts-col' style='width:45px;text-align:center;'>แต้ม</th>"
+                "<th style='width:115px;text-align:center;'>ฟอร์มล่าสุด</th>"
+                "</tr></thead>"
+                f"<tbody>{table_body}</tbody>"
+                "</table></div>"
+                "<div style='display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:0.75rem;color:#64748B;padding-left:2px;align-items:center;'>"
+                "<span><span style='display:inline-block;width:10px;height:10px;background:#2563EB;border-radius:2px;margin-right:4px;'></span>1-8: เข้ารอบ 16 ทีมสุดท้ายโดยตรง (Round of 16)</span>"
+                "<span><span style='display:inline-block;width:10px;height:10px;background:#EA580C;border-radius:2px;margin-right:4px;'></span>9-24: รอบเพลย์ออฟน็อกเอาต์ (Knockout Play-offs)</span>"
+                "<span><span style='display:inline-block;width:10px;height:10px;background:#DC2626;border-radius:2px;margin-right:4px;'></span>25-36: ตกรอบ (Eliminated)</span>"
+                "<span style='color:#CBD5E1;'>|</span>"
+                "<span><span class='pl-form-badge pl-form-w' style='width:14px;height:14px;font-size:0.6rem;margin-right:3px;'>W</span> ชนะ</span>"
+                "<span><span class='pl-form-badge pl-form-d' style='width:14px;height:14px;font-size:0.6rem;margin-right:3px;'>D</span> เสมอ</span>"
+                "<span><span class='pl-form-badge pl-form-l' style='width:14px;height:14px;font-size:0.6rem;margin-right:3px;'>L</span> แพ้</span>"
+                "<span><span class='pl-live-score-pill' style='font-size:0.68rem;padding:1px 5px;margin-right:3px;'>🔴 สด</span> แข่งขันอยู่</span>"
+                "</div>"
+            )
+            st.html(final_html)
+        else:
+            st.warning("⚠️ ไม่สามารถเชื่อมต่อกับฐานข้อมูลตารางคะแนน UCL ได้ในขณะนี้")
+    except Exception as e:
+        st.warning(f"⚠️ เกิดข้อผิดพลาดในการโหลดตารางคะแนน UCL: {str(e)}")
+
+# --- 5. CHAMPIONS LEAGUE FIXTURES & SCORES ---
+elif menu_selection == "📅 5. Champions League Fixtures":
+    try:
+        st.markdown("#### 📅 UEFA Champions League Fixtures & Live Scores")
+        st.caption("ตารางการแข่งขันและผลบอลสด ยูฟ่า แชมเปียนส์ลีก (League Phase) ครบทุกแมตช์เดย์ (Goal.com Live Feed ตรงตามเวลาไทย BKK)")
+
+        t5_c1, t5_c2 = st.columns([1.2, 3.8])
+        with t5_c1:
+            if st.button("🔄 Refresh", key="btn_ucl_fixtures_refresh", use_container_width=True):
+                st.cache_data.clear()
+                st.rerun()
+        with t5_c2:
+            st.link_button("🌐 Goal.com UCL", "https://www.goal.com/th/champions-league/%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%87%E0%B9%81%E0%B8%82%E0%B9%88%E0%B8%87-%E0%B8%9C%E0%B8%A5%E0%B8%81%E0%B8%B2%E0%B8%A3%E0%B9%81%E0%B8%82%E0%B9%88%E0%B8%87%E0%B8%82%E0%B8%B1%E0%B8%99/4oogyu6o156iphvdvphwpck10", use_container_width=False)
+
+        fixtures_raw = fetch_ucl_fixtures()
+        df_all_fixtures = pd.DataFrame(fixtures_raw)
+
+        if not df_all_fixtures.empty:
+            # Check for live matches
+            live_count = len(df_all_fixtures[df_all_fixtures.get('MatchState', '') == 'LIVE']) if 'MatchState' in df_all_fixtures else 0
+
+            ctrl_col1, ctrl_col2 = st.columns([1, 1])
+            with ctrl_col1:
+                all_mws = list(dict.fromkeys(df_all_fixtures['MW'].tolist()))
+                mw_options = ["🌟 แสดงทุกแมตช์เดย์ (All Matchdays)"] + all_mws
+
+                # Auto-detect default matchday (prefer MW with LIVE or next UPCOMING matches)
+                default_idx = 0
+                active_mw_found = None
+                for _, r in df_all_fixtures.iterrows():
+                    if r.get('MatchState') == 'LIVE':
+                        active_mw_found = r['MW']
+                        break
+                    elif r.get('MatchState') == 'UPCOMING' and active_mw_found is None:
+                        active_mw_found = r['MW']
+
+                if active_mw_found and active_mw_found in mw_options:
+                    default_idx = mw_options.index(active_mw_found)
+
+                selected_mw = st.selectbox(
+                    "📅 เลือกแมตช์เดย์การแข่งขัน:",
+                    mw_options,
+                    index=default_idx,
+                    key="ucl_mw_selector"
+                )
+            with ctrl_col2:
+                search_team = st.text_input("🔍 ค้นหาทีมโปรด:", placeholder="พิมพ์ เช่น Real Madrid, Bayern, Liverpool, Barcelona...", key="ucl_team_search")
+
+            st.markdown("---")
+            df_filtered = df_all_fixtures.copy()
+            if selected_mw != "🌟 แสดงทุกแมตช์เดย์ (All Matchdays)":
+                df_filtered = df_filtered[df_filtered['MW'] == selected_mw]
+            if search_team:
+                df_filtered = df_filtered[
+                    df_filtered['Home'].str.contains(search_team, case=False, na=False) |
+                    df_filtered['Away'].str.contains(search_team, case=False, na=False)
+                ]
+
+            if not df_filtered.empty:
+                rows_fix_html = []
+                for _, row in df_filtered.iterrows():
+                    h_badge = f"<img src='{row['HomeBadge']}' style='width:22px;height:22px;vertical-align:middle;margin-left:6px;object-fit:contain;' onerror=\"this.style.display='none'\">" if row.get('HomeBadge') else ""
+                    a_badge = f"<img src='{row['AwayBadge']}' style='width:22px;height:22px;vertical-align:middle;margin-right:6px;object-fit:contain;' onerror=\"this.style.display='none'\">" if row.get('AwayBadge') else ""
+
+                    status_val = str(row.get('Status', ''))
+                    m_state = str(row.get('MatchState', ''))
+
+                    if m_state == "LIVE" or "🔴" in status_val:
+                        status_badge = f"<span class='pl-badge-live'>{status_val}</span>"
+                    elif m_state == "FINISHED" or "⚽" in status_val or "(FT)" in status_val:
+                        status_badge = f"<span class='pl-badge-finished'>{status_val}</span>"
+                    elif "⏰" in status_val:
+                        status_badge = f"<span class='pl-badge-upcoming'>{status_val}</span>"
+                    else:
+                        status_badge = f"<span class='pl-badge-upcoming'>{status_val}</span>"
+
+                    row_html = (
+                        f"<tr>"
+                        f"<td style='padding:12px 10px;text-align:left;white-space:nowrap;width:22%;vertical-align:middle;'>"
+                        f"<div class='pl-fixture-mw'>{row['MW']}</div>"
+                        f"<div class='pl-fixture-date'>{row['Date']}</div>"
+                        f"</td>"
+                        f"<td style='padding:12px 14px;text-align:right;font-weight:600;font-size:0.92rem;white-space:nowrap;vertical-align:middle;width:30%;' class='pl-fixture-team'>"
+                        f"<span>{row['Home']}</span>{h_badge}"
+                        f"</td>"
+                        f"<td style='padding:12px 6px;text-align:center;width:170px;vertical-align:middle;'>"
+                        f"{status_badge}"
+                        f"</td>"
+                        f"<td style='padding:12px 14px;text-align:left;font-weight:600;font-size:0.92rem;white-space:nowrap;vertical-align:middle;width:30%;' class='pl-fixture-team'>"
+                        f"{a_badge}<span>{row['Away']}</span>"
+                        f"</td>"
+                        f"</tr>"
+                    )
+                    rows_fix_html.append(row_html)
+
+                fixtures_body = "".join(rows_fix_html)
+                final_fix_html = (
+                    "<div class='pl-table-container' style='overflow-x:auto;'>"
+                    "<table class='pl-table' style='width:100%;border-collapse:collapse;'>"
+                    "<thead><tr style='background:#F8FAFC;border-bottom:2px solid #E2E8F0;'>"
+                    "<th style='width:22%;text-align:left;padding:10px 10px;color:#334155;font-weight:700;font-size:0.86rem;'>แมตช์เดย์ / วันแข่ง</th>"
+                    "<th style='width:30%;text-align:right;padding:10px 14px;color:#334155;font-weight:700;font-size:0.86rem;'>เจ้าบ้าน (Home)</th>"
+                    "<th style='width:170px;text-align:center;padding:10px 6px;color:#334155;font-weight:700;font-size:0.86rem;'>ผลบอล / เวลา Kickoff (ไทย)</th>"
+                    "<th style='width:30%;text-align:left;padding:10px 14px;color:#334155;font-weight:700;font-size:0.86rem;'>ทีมเยือน (Away)</th>"
+                    "</tr></thead>"
+                    f"<tbody>{fixtures_body}</tbody>"
+                    "</table></div>"
+                )
+                st.html(final_fix_html)
+            else:
+                st.warning("⚠️ ไม่พบคู่การแข่งขันที่ตรงกับเงื่อนไขการค้นหา")
+        else:
+            st.warning("⚠️ กำลังโหลดข้อมูลโปรแกรมการแข่งขัน UCL หรือไม่สามารถเชื่อมต่อได้ในขณะนี้")
+    except Exception as e:
+        st.warning(f"⚠️ เกิดข้อผิดพลาดในการโหลดโปรแกรมการแข่งขัน UCL: {str(e)}")
+
+# --- 6. CURATED RSS FEEDS ---
+elif menu_selection == "📡 6. Curated RSS Feeds":
     try:
         render_rss_page()
     except Exception as e:
         st.warning(f"⚠️ เกิดข้อผิดพลาดในหน้า RSS Feeds: {str(e)}")
 
-# --- 5. MEDIA & VIDEO HUB ---
-elif menu_selection == "📺 5. Media & Video Hub":
+# --- 7. MEDIA & VIDEO HUB ---
+elif menu_selection == "📺 7. Media & Video Hub":
     try:
         render_tech_hub_page()
     except Exception as e:
         st.warning(f"⚠️ เกิดข้อผิดพลาดในหน้า Media & Video Hub: {str(e)}")
 
-# --- 6. YOUTUBE SEARCH HUB ---
-elif menu_selection == "🔍 6. YouTube Search Hub":
+# --- 8. YOUTUBE SEARCH HUB ---
+elif menu_selection == "🔍 8. YouTube Search Hub":
     try:
         render_youtube_search_page()
     except Exception as e:
         st.warning(f"⚠️ เกิดข้อผิดพลาดในหน้า YouTube Search Hub: {str(e)}")
 
-# --- 7. YOUTUBE TRANSCRIPT PRO ---
-elif menu_selection == "🎬 7. YouTube Transcript Pro":
+# --- 9. YOUTUBE TRANSCRIPT PRO ---
+elif menu_selection == "🎬 9. YouTube Transcript Pro":
     try:
         render_youtube_transcript_page()
     except Exception as e:

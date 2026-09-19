@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import os
 import re
 import unicodedata
 from datetime import datetime, timedelta, timezone
@@ -916,3 +917,290 @@ def fetch_goal_fixtures():
 
 # Alias for backward compatibility
 fetch_skysports_fixtures = fetch_goal_fixtures
+
+# ==============================================================================
+# 6. ระบบดึงตารางคะแนนและโปรแกรมการแข่งขัน UEFA Champions League (Goal.com)
+# ==============================================================================
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_ucl_standings():
+    """ดึงตารางคะแนน ยูฟ่า แชมเปียนส์ลีก (รอบ League Phase 36 ทีม) สดเรียลไทม์ พร้อม Live Score และฟอร์ม จาก Goal.com โดยมี Fallback เป็น ESPN และ Local Backup Snapshot"""
+    backup_path = os.path.join(os.path.dirname(__file__), ".ucl_standings_backup.json")
+
+    # 1. Primary Source: Goal.com
+    url_goal = "https://www.goal.com/th/champions-league/%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%87/4oogyu6o156iphvdvphwpck10"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'th-TH,th;q=0.9,en;q=0.8',
+        'Referer': 'https://www.goal.com/th'
+    }
+
+    try:
+        r = requests.get(url_goal, headers=headers, timeout=(5, 12))
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, 'html.parser')
+            table = soup.find('table')
+            if table:
+                rows = table.find_all('tr')
+                data = []
+                for r_item in rows[1:]:
+                    cells = r_item.find_all('td')
+                    if len(cells) >= 11:
+                        pos_str = cells[0].get_text(strip=True)
+                        club_cell = cells[1]
+                        img = club_cell.find('img')
+                        badge_url = img.get('src') if img else ''
+                        club_name = club_cell.get_text(strip=True)
+                        if not badge_url:
+                            badge_url = get_club_logo(club_name)
+
+                        live_score = cells[2].get_text(strip=True)
+                        p_str = cells[3].get_text(strip=True)
+                        w_str = cells[4].get_text(strip=True)
+                        d_str = cells[5].get_text(strip=True)
+                        l_str = cells[6].get_text(strip=True)
+                        f_str = cells[7].get_text(strip=True)
+                        a_str = cells[8].get_text(strip=True)
+                        gd_str = cells[9].get_text(strip=True)
+                        pts_str = cells[10].get_text(strip=True)
+                        form_str = cells[11].get_text(strip=True) if len(cells) > 11 else ''
+
+                        if gd_str and not gd_str.startswith('+') and not gd_str.startswith('-') and gd_str != '0':
+                            gd_str = f"+{gd_str}"
+
+                        data.append({
+                            'Pos': int(pos_str) if pos_str.isdigit() else pos_str,
+                            'Badge': badge_url,
+                            'Club': club_name,
+                            'Live': live_score,
+                            'Pl': int(p_str) if p_str.isdigit() else p_str,
+                            'W': int(w_str) if w_str.isdigit() else w_str,
+                            'D': int(d_str) if d_str.isdigit() else d_str,
+                            'L': int(l_str) if l_str.isdigit() else l_str,
+                            'F': int(f_str) if f_str.isdigit() else f_str,
+                            'A': int(a_str) if a_str.isdigit() else a_str,
+                            'GD': gd_str,
+                            'Pts': int(pts_str) if pts_str.isdigit() else pts_str,
+                            'Form': form_str
+                        })
+
+                if len(data) >= 20:
+                    try:
+                        with open(backup_path, 'w', encoding='utf-8') as f:
+                            json.dump(data, f, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
+                    return pd.DataFrame(data)
+    except Exception:
+        pass
+
+    # 2. Fallback 1: ESPN UCL Standings
+    try:
+        url_espn = "https://www.espn.com/soccer/standings/_/league/uefa.champions"
+        headers_espn = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        r_espn = requests.get(url_espn, headers=headers_espn, timeout=(5, 10))
+        if r_espn.status_code == 200:
+            tables = pd.read_html(io.StringIO(r_espn.text))
+            if len(tables) >= 2:
+                df_names = tables[0]
+                df_stats = tables[1]
+                clean_names = []
+                for raw in df_names.iloc[:, 0]:
+                    s = str(raw).strip()
+                    m = re.match(r'^\d{1,2}[A-Z]{3}(.+)$', s)
+                    if m:
+                        clean_names.append(m.group(1).strip())
+                    else:
+                        clean_names.append(re.sub(r'^\d+', '', s).strip())
+
+                df_espn = pd.DataFrame({
+                    'Pos': list(range(1, len(clean_names) + 1)),
+                    'Club': clean_names,
+                    'Live': '',
+                    'Pl': pd.to_numeric(df_stats['GP'], errors='coerce').fillna(0).astype(int),
+                    'W': pd.to_numeric(df_stats['W'], errors='coerce').fillna(0).astype(int),
+                    'D': pd.to_numeric(df_stats['D'], errors='coerce').fillna(0).astype(int),
+                    'L': pd.to_numeric(df_stats['L'], errors='coerce').fillna(0).astype(int),
+                    'F': df_stats['F'],
+                    'A': df_stats['A'],
+                    'GD': df_stats['GD'].apply(lambda x: f"+{x}" if str(x).isdigit() and int(x) > 0 else str(x)),
+                    'Pts': pd.to_numeric(df_stats['P'], errors='coerce').fillna(0).astype(int),
+                    'Form': ''
+                })
+                df_espn['Badge'] = df_espn['Club'].apply(get_club_logo)
+                if len(df_espn) >= 20:
+                    out_df = df_espn[['Pos', 'Badge', 'Club', 'Live', 'Pl', 'W', 'D', 'L', 'F', 'A', 'GD', 'Pts', 'Form']]
+                    try:
+                        with open(backup_path, 'w', encoding='utf-8') as f:
+                            json.dump(out_df.to_dict('records'), f, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
+                    return out_df
+    except Exception:
+        pass
+
+    # 3. Fallback 2: Local Persistent Snapshot Backup
+    if os.path.exists(backup_path):
+        try:
+            with open(backup_path, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+            if backup_data and len(backup_data) >= 16:
+                return pd.DataFrame(backup_data)
+        except Exception:
+            pass
+
+    return pd.DataFrame()
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_ucl_fixtures():
+    """ดึงตารางการแข่งขันและผลบอลสด UEFA Champions League ครบทุกแมตช์เดย์จาก Goal.com Live API ตรงตามเวลาไทย พร้อม Local Backup Snapshot"""
+    backup_path = os.path.join(os.path.dirname(__file__), ".ucl_fixtures_backup.json")
+    tz_thai = timezone(timedelta(hours=7))
+    thai_months = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+    thai_days = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"]
+
+    def parse_iso_date_thai_ucl(iso_str):
+        if not iso_str:
+            return "", ""
+        try:
+            iso_clean = str(iso_str).replace("Z", "+00:00")
+            dt = datetime.fromisoformat(iso_clean).astimezone(tz_thai)
+            day_name = thai_days[dt.weekday()]
+            date_str = f"วัน{day_name} {dt.day} {thai_months[dt.month]} {dt.year + 543}"
+            time_str = dt.strftime("%H:%M น.")
+            return date_str, time_str
+        except Exception:
+            return str(iso_str), ""
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": "https://www.goal.com/th",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "th-TH,th;q=0.9,en;q=0.8"
+    }
+
+    try:
+        url = "https://www.goal.com/th/champions-league/%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%87%E0%B9%81%E0%B8%82%E0%B9%88%E0%B8%87-%E0%B8%9C%E0%B8%A5%E0%B8%81%E0%B8%B2%E0%B8%A3%E0%B9%81%E0%B8%82%E0%B9%88%E0%B8%87%E0%B8%82%E0%B8%B1%E0%B8%99/4oogyu6o156iphvdvphwpck10"
+        resp = requests.get(url, headers=headers, timeout=(5, 12))
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            script = soup.find('script', id='__NEXT_DATA__')
+            if script:
+                data = json.loads(script.string)
+                content = data.get('props', {}).get('pageProps', {}).get('content', {})
+                gamesets_meta = content.get('gamesets', [])
+
+                results = {}
+                to_fetch = []
+
+                for idx, gs in enumerate(gamesets_meta):
+                    gst_id = gs.get('gameSetTypeId')
+                    matches = gs.get('matches', [])
+                    if matches:
+                        results[idx] = matches
+                    else:
+                        to_fetch.append((idx, gst_id))
+
+                def fetch_ucl_mw(item):
+                    idx, gst_id = item
+                    try:
+                        r = requests.get(
+                            "https://www.goal.com/api/competition-matches",
+                            params={"id": "4oogyu6o156iphvdvphwpck10", "gameSetTypeIds": gst_id, "edition": "th"},
+                            headers=headers,
+                            timeout=(4, 10)
+                        )
+                        if r.status_code == 200:
+                            gs_list = r.json().get('gamesets', [])
+                            if gs_list:
+                                return idx, gs_list[0].get('matches', [])
+                    except Exception:
+                        pass
+                    return idx, []
+
+                if to_fetch:
+                    with ThreadPoolExecutor(max_workers=8) as executor:
+                        fetched = list(executor.map(fetch_ucl_mw, to_fetch))
+                    for idx, matches in fetched:
+                        results[idx] = matches
+
+                all_fixtures = []
+                for idx in sorted(results.keys()):
+                    mw_name = f"Matchday {idx + 1}"
+                    matches = results[idx]
+
+                    for m in matches:
+                        team_a = m.get('teamA', {})
+                        team_b = m.get('teamB', {})
+                        h_name = team_a.get('name', 'Home')
+                        a_name = team_b.get('name', 'Away')
+
+                        h_badge = team_a.get('image', {}).get('url') if team_a.get('image') else ""
+                        if not h_badge:
+                            h_badge = get_club_logo(h_name)
+                        a_badge = team_b.get('image', {}).get('url') if team_b.get('image') else ""
+                        if not a_badge:
+                            a_badge = get_club_logo(a_name)
+
+                        start_date_raw = m.get('startDate')
+                        d_str, t_str = parse_iso_date_thai_ucl(start_date_raw)
+
+                        status_type = str(m.get('status', 'FIXTURE')).upper()
+                        score_obj = m.get('score') or {}
+                        hs = score_obj.get('teamA')
+                        as_ = score_obj.get('teamB')
+                        period = m.get('period') or {}
+
+                        if status_type in ['RESULT', 'PLAYED', 'FINISHED', 'FT', 'AET', 'PENALTIES']:
+                            hs_val = hs if hs is not None else 0
+                            as_val = as_ if as_ is not None else 0
+                            status_display = f"⚽ {hs_val} - {as_val} (FT)"
+                            match_state = "FINISHED"
+                        elif status_type in ['LIVE', 'IN_PLAY', 'FIRST_HALF', 'SECOND_HALF', 'HALF_TIME', 'EXTRA_TIME']:
+                            hs_val = hs if hs is not None else 0
+                            as_val = as_ if as_ is not None else 0
+                            p_type = str(period.get('type', '')).upper()
+                            minute = period.get('minute')
+                            time_label = "LIVE"
+                            if 'HALF_TIME' in p_type or p_type == 'HT':
+                                time_label = "HT"
+                            elif minute:
+                                time_label = f"{minute}'"
+                            status_display = f"🔴 {hs_val} - {as_val} ({time_label})"
+                            match_state = "LIVE"
+                        else:
+                            status_display = f"⏰ {t_str}"
+                            match_state = "UPCOMING"
+
+                        all_fixtures.append({
+                            "MW": mw_name,
+                            "Date": d_str,
+                            "Home": h_name,
+                            "HomeBadge": h_badge,
+                            "Away": a_name,
+                            "AwayBadge": a_badge,
+                            "Status": status_display,
+                            "MatchState": match_state
+                        })
+
+                if all_fixtures:
+                    try:
+                        with open(backup_path, 'w', encoding='utf-8') as f:
+                            json.dump(all_fixtures, f, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
+                    return all_fixtures
+    except Exception:
+        pass
+
+    # Fallback: Local Persistent Snapshot Backup
+    if os.path.exists(backup_path):
+        try:
+            with open(backup_path, 'r', encoding='utf-8') as f:
+                backup_fixtures = json.load(f)
+            if backup_fixtures:
+                return backup_fixtures
+        except Exception:
+            pass
+
+    return []

@@ -65,7 +65,24 @@ CLUB_BADGES = {
     "spurs": "https://a.espncdn.com/i/teamlogos/soccer/500/367.png",
     "west ham": "https://a.espncdn.com/i/teamlogos/soccer/500/371.png",
     "wolves": "https://a.espncdn.com/i/teamlogos/soccer/500/380.png",
-    "wolverhampton": "https://a.espncdn.com/i/teamlogos/soccer/500/380.png"
+    "wolverhampton": "https://a.espncdn.com/i/teamlogos/soccer/500/380.png",
+    # European Heavyweights (UCL)
+    "real madrid": "https://a.espncdn.com/i/teamlogos/soccer/500/86.png",
+    "barcelona": "https://a.espncdn.com/i/teamlogos/soccer/500/83.png",
+    "bayern": "https://a.espncdn.com/i/teamlogos/soccer/500/132.png",
+    "paris saint-germain": "https://a.espncdn.com/i/teamlogos/soccer/500/160.png",
+    "psg": "https://a.espncdn.com/i/teamlogos/soccer/500/160.png",
+    "atletico": "https://a.espncdn.com/i/teamlogos/soccer/500/1068.png",
+    "dortmund": "https://a.espncdn.com/i/teamlogos/soccer/500/124.png",
+    "inter": "https://a.espncdn.com/i/teamlogos/soccer/500/110.png",
+    "juventus": "https://a.espncdn.com/i/teamlogos/soccer/500/111.png",
+    "milan": "https://a.espncdn.com/i/teamlogos/soccer/500/103.png",
+    "leverkusen": "https://a.espncdn.com/i/teamlogos/soccer/500/131.png",
+    "leipzig": "https://a.espncdn.com/i/teamlogos/soccer/500/11420.png",
+    "atalanta": "https://a.espncdn.com/i/teamlogos/soccer/500/107.png",
+    "sporting": "https://a.espncdn.com/i/teamlogos/soccer/500/2269.png",
+    "benfica": "https://a.espncdn.com/i/teamlogos/soccer/500/2248.png",
+    "monaco": "https://a.espncdn.com/i/teamlogos/soccer/500/174.png"
 }
 
 def get_club_logo(name):
@@ -244,11 +261,25 @@ CUSTOM_CSS = """
 
     .stButton>button {
         width: 100%; background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%); color: #FFFFFF !important;
-        border: none; border-radius: 6px; height: 35px !important; min-height: 35px !important; font-weight: 600; font-size: 0.83rem !important;
-        padding: 4px 8px !important;
+        border: none; border-radius: 7px; height: 38px !important; min-height: 38px !important; font-weight: 600; font-size: 0.84rem !important;
+        padding: 4px 16px !important; white-space: nowrap !important; min-width: fit-content !important;
         box-shadow: 0 2px 6px rgba(37, 99, 235, 0.18); transition: all 0.15s ease;
     }
     .stButton>button:hover { background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%); box-shadow: 0 4px 10px rgba(37, 99, 235, 0.28); transform: translateY(-1px); }
+
+    .stLinkButton>a {
+        width: auto !important; min-width: fit-content !important; white-space: nowrap !important;
+        height: 38px !important; min-height: 38px !important;
+        display: inline-flex !important; align-items: center !important; justify-content: center !important;
+        border-radius: 7px; font-weight: 600; font-size: 0.84rem !important;
+        padding: 4px 16px !important; text-decoration: none !important;
+        border: 1px solid #CBD5E1 !important; background-color: #FFFFFF !important; color: #1E293B !important;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05); transition: all 0.15s ease;
+    }
+    .stLinkButton>a:hover {
+        border-color: #94A3B8 !important; background-color: #F8FAFC !important; color: #0F172A !important;
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08); transform: translateY(-1px);
+    }
 
     /* --- Premier League Custom Responsive Table --- */
     .pl-table-container {
